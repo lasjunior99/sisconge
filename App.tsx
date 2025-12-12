@@ -88,7 +88,7 @@ export default function App() {
           Admin
         </button>
         <button onClick={() => setActiveTab(Tab.GUIDE)} className={navItemClass(Tab.GUIDE)}>
-          Ajuda
+          Orientações
         </button>
       </nav>
 
