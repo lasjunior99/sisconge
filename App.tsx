@@ -164,7 +164,7 @@ export default function App() {
                 <div className="space-y-3 text-sm text-slate-700">
                   <p>Esta aba é destinada à inserção dos números, histórico e metas futuras.</p>
                   <ol className="list-decimal pl-5 space-y-2">
-                    <li><strong>Filtros:</strong> Utilize os filtros no topo (Perspectiva -> Objetivo -> Indicador) para encontrar o item desejado.</li>
+                    <li><strong>Filtros:</strong> Utilize os filtros no topo (Perspectiva &rarr; Objetivo &rarr; Indicador) para encontrar o item desejado.</li>
                     <li><strong>Identificação:</strong> O sistema exibirá automaticamente o nome do Gestor responsável pelo indicador selecionado.</li>
                     <li><strong>Configuração do Indicador:</strong>
                       <ul className="list-disc pl-5 mt-1 text-slate-500">
