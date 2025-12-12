@@ -59,7 +59,6 @@ export const saveFirebaseConfig = (configStr: string): boolean => {
   const success = initFirebase(configStr);
   if (success) {
     localStorage.setItem(LS_CONFIG_KEY, configStr);
-    // O reload agora é responsabilidade da UI para evitar erros visuais
     return true;
   }
   return false;
@@ -67,9 +66,36 @@ export const saveFirebaseConfig = (configStr: string): boolean => {
 
 export const clearFirebaseConfig = () => {
   localStorage.removeItem(LS_CONFIG_KEY);
-  // O reload agora é responsabilidade da UI
 };
 
 export const isFirebaseConnected = () => !!db;
+
+// --- NOVO: Função para Auto-Configuração via URL ---
+export const checkForUrlConfig = (): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  const params = new URLSearchParams(window.location.search);
+  const encodedConfig = params.get('config');
+
+  if (encodedConfig) {
+    try {
+      // Decode Base64 string
+      const decodedStr = atob(encodedConfig);
+      console.log("🔗 Configuração via Link detectada.");
+      
+      const success = saveFirebaseConfig(decodedStr);
+      if (success) {
+        // Limpa a URL para não ficar feia e para segurança
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({path: newUrl}, "", newUrl);
+        return true;
+      }
+    } catch (e) {
+      console.error("Falha ao processar configuração da URL", e);
+      alert("O link de acesso parece inválido ou corrompido.");
+    }
+  }
+  return false;
+};
 
 export { db, doc, getDoc, setDoc, updateDoc, onSnapshot };

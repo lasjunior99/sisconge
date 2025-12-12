@@ -250,6 +250,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }, 1500);
   };
 
+  const handleCopyShareLink = () => {
+    const rawConfig = localStorage.getItem('kpi_firebase_config');
+    if (!rawConfig) {
+        alert("Erro: Configuração não encontrada no navegador.");
+        return;
+    }
+    try {
+        const encoded = btoa(rawConfig);
+        const url = `${window.location.origin}${window.location.pathname}?config=${encoded}`;
+        navigator.clipboard.writeText(url);
+        alert("Link copiado para a área de transferência! Envie este link para os gestores.");
+    } catch (e) {
+        alert("Erro ao gerar link.");
+    }
+  };
+
   // --- Batch Handlers (Simplified for brevity as they were correct) ---
   const handleBatchManagers = () => { 
       const names = batchManagers.split('\n').map(s => s.trim()).filter(s => s);
@@ -512,16 +528,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Os dados estão sendo salvos na nuvem do Google.
                 </p>
                 <div className="p-4 bg-white rounded border border-green-100 text-left max-w-lg mx-auto mb-4">
-                   <h5 className="font-bold text-green-800 text-sm mb-1">Link de Acesso (URL)</h5>
+                   <h5 className="font-bold text-green-800 text-sm mb-1">🔗 Link de Acesso Universal (Magic Link)</h5>
                    <p className="text-xs text-slate-600 mb-2">
-                     Este sistema não possui domínio próprio (www...). Para enviar aos usuários:
+                     Para que outros usuários acessem este mesmo banco de dados sem precisar configurar nada, envie o link abaixo.
                    </p>
-                   <ol className="list-decimal pl-4 text-xs text-slate-600 space-y-1">
-                       <li>Copie o link longo na barra de endereço do navegador.</li>
-                       <li>Acesse um encurtador como <strong>bit.ly</strong>.</li>
-                       <li>Crie um link curto (ex: <code>bit.ly/sisconge</code>).</li>
-                       <li>Envie este link curto para os gestores.</li>
-                   </ol>
+                   <Button size="sm" onClick={handleCopyShareLink} className="w-full">
+                     Copiar Link de Convite
+                   </Button>
+                   <p className="text-[10px] text-slate-400 mt-2 text-center">
+                     Este link contém as chaves de acesso embutidas. Envie apenas para pessoas de confiança.
+                   </p>
                 </div>
                 <Button variant="danger" size="sm" onClick={handleDisconnectFirebase}>
                   Desconectar (Voltar para modo Offline)

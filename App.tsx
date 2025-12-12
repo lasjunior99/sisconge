@@ -6,7 +6,7 @@ import { GoalsPanel } from './components/GoalsPanel';
 import { Logo } from './components/ui/Logo';
 import { AppData, INITIAL_DATA } from './types';
 import { storageService } from './services/storageService';
-import { isFirebaseConnected } from './services/firebase';
+import { isFirebaseConnected, checkForUrlConfig } from './services/firebase';
 
 enum Tab {
   MANAGER = 'manager',
@@ -19,12 +19,23 @@ enum Tab {
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.MANAGER);
   const [appData, setAppData] = useState<AppData>(INITIAL_DATA);
-  const [isOnline] = useState(isFirebaseConnected());
+  const [isOnline, setIsOnline] = useState(isFirebaseConnected());
   
   // Admin State persisted via Session Storage (survives page refresh, dies on tab close)
   const [adminAuthenticated, setAdminAuthenticated] = useState(() => {
     return sessionStorage.getItem('adminAuth') === 'true';
   });
+
+  // Check for Magic Link Config on Mount
+  useEffect(() => {
+    const didAutoConfig = checkForUrlConfig();
+    if (didAutoConfig) {
+       // Force update state if config changed
+       setIsOnline(isFirebaseConnected());
+       // Reload to ensure subscription starts with new DB
+       window.location.reload(); 
+    }
+  }, []);
 
   const handleAdminAuth = (status: boolean) => {
     setAdminAuthenticated(status);
@@ -141,7 +152,7 @@ export default function App() {
                         <li><em>Descrição Operacional:</em> O que está sendo medido e por quê.</li>
                         <li><em>Fórmula:</em> A matemática por trás do cálculo.</li>
                         <li><em>Fonte de Dados:</em> De onde a informação é extraída.</li>
-                        <li><em>Polaridade:</em> Se "Quanto maior melhor" ou "Quanto menor melhor".</li>
+                        <li><em>Fonte de Dados:</em> Se "Quanto maior melhor" ou "Quanto menor melhor".</li>
                       </ul>
                     </li>
                     <li><strong>Ações de Salvar:</strong>
