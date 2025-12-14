@@ -29,7 +29,6 @@ export interface Indicator {
   polarity: string;
   status: 'draft' | 'final';
   updatedAt: string;
-  // New fields linked to Goal Logic
   calcType?: 'isolated' | 'accumulated' | 'average';
   semaphore?: {
     blue: string;
@@ -43,26 +42,34 @@ export interface Goal {
   id: string;
   indicatorId: string;
   year: number;
-  history: { year: number; value: string }[]; // Last 3 years
-  monthlyValues: string[]; // 12 months array (strings to handle empty inputs)
+  history: { year: number; value: string }[];
+  monthlyValues: string[];
+}
+
+export interface User {
+  email: string;
+  nome: string;
+  perfil: 'ADMIN' | 'EDITOR' | 'LEITOR';
+  ativo: boolean;
+  senha?: string; // Usado apenas na edição, nunca exposto em logs
 }
 
 export interface AppData {
-  adminPassword: string;
   perspectives: Perspective[];
   managers: Manager[];
   objectives: Objective[];
   indicators: Indicator[];
   goals: Goal[];
+  users: User[];
 }
 
 export const INITIAL_DATA: AppData = {
-  adminPassword: 'admin123',
   perspectives: [],
   managers: [],
   objectives: [],
   indicators: [],
-  goals: []
+  goals: [],
+  users: []
 };
 
 // Declaração global para bibliotecas carregadas via CDN
