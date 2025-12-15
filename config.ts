@@ -3,6 +3,6 @@
 // ==========================================================
 
 // URL Fixa do Backend Google Apps Script
-export const API_URL = "https://script.google.com/macros/s/AKfycbxtQhNQrArJdV5y44r9jAbpjQqR2oaMtDfKnk1Go9Nnftd5ZZqO7SjF287Jqmii5ki4zg/exec";
+export const API_URL = "https://script.google.com/macros/s/AKfycbwmu0vlJ7iNTAsGpW7t9GSOpdVAAvhg5g6qr8L0BuVGt4Ln9kQapoBwyJfXuTwmtP6uEQ/exec";
 
 export const SYSTEM_VERSION = "2.0 Distributed";

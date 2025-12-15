@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { AppData, User } from '../types';
+import React, { useState, useRef } from 'react';
+import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA } from '../types';
 import { Button } from './ui/Button';
-import { PasswordInput } from './ui/PasswordInput';
 import { excelParser } from '../services/apiService';
 
 interface AdminPanelProps {
@@ -10,234 +9,444 @@ interface AdminPanelProps {
   onUpdate: (newData: AppData, section: any) => void;
 }
 
-type TabMode = 'structure' | 'import' | 'users';
+type TabMode = 'structure' | 'import';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   data, 
   user,
   onUpdate 
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<TabMode>('import');
+  // --- Tab State ---
+  const [activeSubTab, setActiveSubTab] = useState<TabMode>('structure');
   
-  // --- States for Manual Structure ---
-  const [newManager, setNewManager] = useState('');
-  const [newPerspective, setNewPerspective] = useState('');
-  
-  // --- States for Import ---
+  // --- Import State ---
   const [importReport, setImportReport] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- States for User Management ---
-  const [newUser, setNewUser] = useState<Partial<User>>({ perfil: 'LEITOR', ativo: true });
+  // --- Preview State ---
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+
+  // --- CRUD States for Structure ---
+  const [newPerspName, setNewPerspName] = useState('');
+  const [newManagerName, setNewManagerName] = useState('');
+  const [newObjName, setNewObjName] = useState('');
+  const [selectedPerspForObj, setSelectedPerspForObj] = useState('');
 
   const generateId = (prefix: string) => `${prefix}-` + Math.random().toString(36).substr(2, 9).toUpperCase();
-  const normalizeKey = (str: string) => String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  const normalizeKey = (str: string) => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
-  // --- ACCESS CONTROL ---
-  if (user.perfil !== 'ADMIN') {
-    return (
-      <div className="p-10 text-center bg-white rounded shadow text-slate-500">
-         <i className="ph ph-lock-key text-4xl mb-2"></i>
-         <h2 className="text-xl font-bold">Acesso Restrito</h2>
-         <p>Apenas administradores podem acessar este painel.</p>
-      </div>
-    );
-  }
-
-  // --- USER HANDLERS ---
-  const handleAddUser = () => {
-    if (!newUser.email || !newUser.nome || !newUser.senha) {
-       alert("Preencha todos os campos obrigatórios.");
-       return;
-    }
-    const updatedUsers = [...data.users, newUser as User];
-    onUpdate({ ...data, users: updatedUsers }, 'users');
-    setNewUser({ perfil: 'LEITOR', ativo: true, nome: '', email: '', senha: '' });
+  // --- GENERIC CRUD HANDLERS ---
+  const handleEdit = (type: 'persp' | 'obj' | 'mgr' | 'ind', id: string, currentName: string) => {
+    const newName = prompt("Editar nome:", currentName);
+    if (!newName || newName.trim() === currentName) return;
+    const trimmed = newName.trim();
+    
+    let newData = { ...data };
+    
+    if (type === 'persp') newData.perspectives = data.perspectives.map(p => p.id === id ? { ...p, name: trimmed } : p);
+    else if (type === 'mgr') newData.managers = data.managers.map(m => m.id === id ? { ...m, name: trimmed } : m);
+    else if (type === 'obj') newData.objectives = data.objectives.map(o => o.id === id ? { ...o, name: trimmed } : o);
+    else if (type === 'ind') newData.indicators = data.indicators.map(i => i.id === id ? { ...i, name: trimmed } : i);
+    
+    onUpdate(newData, 'structure');
   };
 
-  const handleDeleteUser = (email: string) => {
-    if (email === user.email) { alert("Você não pode excluir a si mesmo."); return; }
-    if (!confirm("Excluir usuário?")) return;
-    const updatedUsers = data.users.filter(u => u.email !== email);
-    onUpdate({ ...data, users: updatedUsers }, 'users');
+  const handleDelete = (type: 'persp' | 'obj' | 'mgr' | 'ind', id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este item?")) return;
+    
+    let newData = { ...data };
+    
+    if (type === 'persp') newData.perspectives = data.perspectives.filter(p => p.id !== id);
+    else if (type === 'mgr') newData.managers = data.managers.filter(m => m.id !== id);
+    else if (type === 'obj') newData.objectives = data.objectives.filter(o => o.id !== id);
+    else if (type === 'ind') {
+      newData.indicators = data.indicators.filter(i => i.id !== id);
+      newData.goals = data.goals.filter(g => g.indicatorId !== id);
+    }
+    
+    onUpdate(newData, 'structure');
+  };
+
+  const addPerspective = () => {
+    if (!newPerspName.trim()) return;
+    onUpdate({ ...data, perspectives: [...data.perspectives, { id: generateId('PERSP'), name: newPerspName.trim() }] }, 'structure');
+    setNewPerspName('');
+  };
+
+  const addManager = () => {
+    if (!newManagerName.trim()) return;
+    onUpdate({ ...data, managers: [...data.managers, { id: generateId('MGR'), name: newManagerName.trim() }] }, 'structure');
+    setNewManagerName('');
+  };
+
+  const addObjective = () => {
+    if (!newObjName.trim() || !selectedPerspForObj) return;
+    onUpdate({ ...data, objectives: [...data.objectives, { id: generateId('OBJ'), name: newObjName.trim(), perspectiveId: selectedPerspForObj, gestorId: '' }] }, 'structure');
+    setNewObjName('');
   };
 
   // --- IMPORT LOGIC ---
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportReport(null);
+    setPreviewData([]);
+    setShowPreview(false);
+
     try {
-      const rows = await excelParser.parse(e.target.files[0]);
-      processImportData(rows);
-    } catch (err) {
-      alert("Erro ao ler arquivo.");
+      const rawRows = await excelParser.parse(file);
+      analyzeImportFile(rawRows);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro ao ler arquivo: ${err.message || 'Formato inválido'}.`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-    e.target.value = '';
   };
 
-  const processImportData = (rows: any[]) => {
-    // Mesma lógica de processamento, adaptada para chamar onUpdate com 'structure' e 'indicators'
-    let newPerspectives = [...data.perspectives];
-    let newManagers = [...data.managers];
-    let newObjectives = [...data.objectives];
-    let newIndicators = [...data.indicators];
-    let stats = { p: 0, o: 0, i: 0, m: 0 };
+  const analyzeImportFile = (rows: any[]) => {
+    if (!rows || rows.length === 0) return alert("Arquivo vazio.");
 
-    rows.forEach((rawRow: any) => {
-      const row: any = {};
-      Object.keys(rawRow).forEach(key => row[normalizeKey(key)] = rawRow[key]);
+    // 1. Find Header
+    let headerRowIndex = -1;
+    let colIndices = { persp: -1, obj: -1, ind: -1, mgr: -1 };
+    const synonyms = {
+      persp: ['perspectiva', 'perspective', 'dimensao'],
+      obj: ['objetivo', 'objective', 'estrategia'],
+      ind: ['indicador', 'indicator', 'nome', 'kpi'],
+      mgr: ['gestor', 'manager', 'responsavel']
+    };
 
-      const getVal = (aliases: string[]) => {
-        for (const alias of aliases) if (row[alias]) return String(row[alias]).trim();
-        return '';
-      };
+    const findIndex = (row: any[], keys: string[]) => row.findIndex(c => c && keys.includes(normalizeKey(c)));
 
-      const perspName = getVal(['perspectiva', 'perspective']);
-      const objName = getVal(['objetivo', 'objective']);
-      const indName = getVal(['indicador', 'indicator']);
-      const gestorName = getVal(['gestor', 'manager']);
-
-      if (!perspName || !objName || !indName) return;
-
-      let persp = newPerspectives.find(p => normalizeKey(p.name) === normalizeKey(perspName));
-      if (!persp) { persp = { id: generateId('PERSP'), name: perspName }; newPerspectives.push(persp); stats.p++; }
-
-      let managerId = '';
-      if (gestorName) {
-          let manager = newManagers.find(m => normalizeKey(m.name) === normalizeKey(gestorName));
-          if (!manager) { manager = { id: generateId('MGR'), name: gestorName }; newManagers.push(manager); stats.m++; }
-          managerId = manager.id;
+    for (let i = 0; i < Math.min(rows.length, 25); i++) {
+      const row = rows[i];
+      if (!Array.isArray(row)) continue;
+      const normRow = row.map(c => normalizeKey(c));
+      
+      const idxInd = findIndex(normRow, synonyms.ind);
+      if (idxInd !== -1) {
+        const idxPersp = findIndex(normRow, synonyms.persp);
+        const idxObj = findIndex(normRow, synonyms.obj);
+        
+        // At least Indicator + (Perspective OR Objective)
+        if (idxPersp !== -1 || idxObj !== -1) {
+          headerRowIndex = i;
+          colIndices = { persp: idxPersp, obj: idxObj, ind: idxInd, mgr: findIndex(normRow, synonyms.mgr) };
+          break;
+        }
       }
+    }
 
-      let obj = newObjectives.find(o => normalizeKey(o.name) === normalizeKey(objName) && o.perspectiveId === persp!.id);
-      if (!obj) { obj = { id: generateId('OBJ'), name: objName, perspectiveId: persp!.id, gestorId: managerId }; newObjectives.push(obj); stats.o++; }
+    if (headerRowIndex === -1) {
+      alert("❌ Cabeçalho não encontrado.\nO sistema procura por: 'Perspectiva', 'Objetivo' e 'Indicador'.");
+      return;
+    }
 
-      let ind = newIndicators.find(i => normalizeKey(i.name) === normalizeKey(indName) && i.objetivoId === obj!.id);
-      if (!ind) {
-        ind = {
-          id: generateId('IND'), name: indName, perspectivaId: persp!.id, objetivoId: obj!.id, gestorId: managerId,
-          description: '', formula: '', unit: '', source: '', periodicity: '', polarity: '', status: 'draft', updatedAt: new Date().toISOString()
-        };
-        newIndicators.push(ind);
-        stats.i++;
-      }
-    });
+    // 2. Extract Data with Fill-Down
+    const extractedData = [];
+    let lastPersp = '';
+    let lastObj = '';
 
-    onUpdate({
-        ...data,
-        perspectives: newPerspectives,
-        managers: newManagers,
-        objectives: newObjectives,
-        indicators: newIndicators
-    }, 'structure'); // Salva estrutura
+    for (let i = headerRowIndex + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!Array.isArray(row)) continue;
 
-    // Atualiza indicadores separadamente
-    setTimeout(() => {
-        onUpdate({ ...data, indicators: newIndicators } as AppData, 'indicators');
-    }, 1000);
-    
-    setImportReport(`Importação: ${stats.p} Persp, ${stats.o} Obj, ${stats.i} Ind, ${stats.m} Gestores.`);
+      const rawInd = row[colIndices.ind] ? String(row[colIndices.ind]).trim() : '';
+      if (!rawInd) continue;
+
+      const rawPersp = (colIndices.persp !== -1 && row[colIndices.persp]) ? String(row[colIndices.persp]).trim() : '';
+      if (rawPersp) lastPersp = rawPersp;
+
+      const rawObj = (colIndices.obj !== -1 && row[colIndices.obj]) ? String(row[colIndices.obj]).trim() : '';
+      if (rawObj) lastObj = rawObj;
+
+      // Ensure we have context
+      if (!lastPersp && !lastObj) continue; 
+
+      extractedData.push({
+        persp: lastPersp || 'Geral',
+        obj: lastObj || 'Geral',
+        ind: rawInd,
+        mgr: (colIndices.mgr !== -1 && row[colIndices.mgr]) ? String(row[colIndices.mgr]).trim() : ''
+      });
+    }
+
+    if (extractedData.length === 0) {
+      alert("Nenhum indicador válido encontrado nas linhas abaixo do cabeçalho.");
+      return;
+    }
+
+    setPreviewData(extractedData);
+    setShowPreview(true);
   };
 
-  const removeManager = (id: string) => {
-      const newData = {...data, managers: data.managers.filter(x => x.id !== id)};
-      onUpdate(newData, 'structure');
+  const confirmImport = () => {
+    try {
+      let newPerspectives = [...data.perspectives];
+      let newObjectives = [...data.objectives];
+      let newManagers = [...data.managers];
+      let newIndicators = [...data.indicators];
+      let count = 0;
+
+      previewData.forEach(row => {
+        // 1. Perspective
+        let p = newPerspectives.find(x => normalizeKey(x.name) === normalizeKey(row.persp));
+        if (!p) { p = { id: generateId('PERSP'), name: row.persp }; newPerspectives.push(p); }
+
+        // 2. Manager
+        let mId = '';
+        if (row.mgr) {
+          let m = newManagers.find(x => normalizeKey(x.name) === normalizeKey(row.mgr));
+          if (!m) { m = { id: generateId('MGR'), name: row.mgr }; newManagers.push(m); }
+          mId = m.id;
+        }
+
+        // 3. Objective
+        let o = newObjectives.find(x => normalizeKey(x.name) === normalizeKey(row.obj) && x.perspectiveId === p!.id);
+        if (!o) { o = { id: generateId('OBJ'), name: row.obj, perspectiveId: p!.id, gestorId: mId }; newObjectives.push(o); }
+
+        // 4. Indicator
+        const exists = newIndicators.some(x => normalizeKey(x.name) === normalizeKey(row.ind) && x.objetivoId === o!.id);
+        if (!exists) {
+          newIndicators.push({
+            id: generateId('IND'), name: row.ind, perspectivaId: p!.id, objetivoId: o!.id, gestorId: mId,
+            description: '', formula: '', unit: '', source: '', periodicity: '', polarity: '', status: 'draft', updatedAt: new Date().toISOString()
+          });
+          count++;
+        }
+      });
+
+      onUpdate({ ...data, perspectives: newPerspectives, managers: newManagers, objectives: newObjectives, indicators: newIndicators }, 'structure');
+      
+      setImportReport(`✅ Importação Concluída: ${count} novos indicadores adicionados.`);
+      setShowPreview(false);
+      setPreviewData([]);
+
+    } catch (e: any) {
+      alert(`Erro ao salvar dados: ${e.message}`);
+    }
   };
-  const removePerspective = (id: string) => {
-      const newData = {...data, perspectives: data.perspectives.filter(x => x.id !== id)};
-      onUpdate(newData, 'structure');
+
+  const cancelImport = () => {
+    setShowPreview(false);
+    setPreviewData([]);
+    setImportReport(null);
+  };
+
+  const handleExportData = () => {
+    const XLSX = window.XLSX;
+    if (!XLSX) return alert("Erro: Biblioteca Excel não carregada.");
+    const rows = data.indicators.map(ind => ({
+        'Perspectiva': data.perspectives.find(p => p.id === ind.perspectivaId)?.name || '',
+        'Objetivo': data.objectives.find(o => o.id === ind.objetivoId)?.name || '',
+        'Indicador': ind.name,
+        'Gestor': data.managers.find(m => m.id === ind.gestorId)?.name || ''
+    }));
+    if (rows.length === 0) return alert("Não há dados para exportar.");
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Dados_Estrutura");
+    XLSX.writeFile(wb, "Backup_Estrutura.xlsx");
+  };
+
+  const handleClearDatabase = () => {
+    if (confirm("⚠️ ATENÇÃO: Deseja apagar TODOS os dados do sistema?\n\nIsso excluirá permanentemente indicadores, metas e histórico.")) {
+        onUpdate({ ...INITIAL_DATA, users: data.users }, 'structure');
+        setImportReport("Base de dados limpa com sucesso.");
+        setPreviewData([]);
+        setShowPreview(false);
+    }
   };
 
   return (
     <div className="space-y-6 pb-10">
       <div className="flex justify-between items-center border-b pb-4 bg-white p-4 rounded shadow-sm">
-        <h2 className="text-2xl font-bold text-blue-900 flex items-center gap-2">
-            Painel do Administrador
-        </h2>
+        <h2 className="text-2xl font-bold text-blue-900 flex items-center gap-2"><i className="ph ph-shield-check"></i> Painel do Administrador</h2>
+        {/* Sair button removed */}
       </div>
 
       <div className="flex gap-2 border-b border-slate-200 pb-1 overflow-x-auto">
-        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors ${activeSubTab === 'import' ? 'bg-white border-x border-t text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('import')}>📥 Importação</button>
-        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors ${activeSubTab === 'structure' ? 'bg-white border-x border-t text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('structure')}>🛠️ Estrutura</button>
-        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors ${activeSubTab === 'users' ? 'bg-white border-x border-t text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('users')}>👥 Usuários</button>
+        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'structure' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('structure')}>🛠️ Manual</button>
+        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'import' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('import')}>📥 Importação</button>
       </div>
-
-      {activeSubTab === 'users' && (
-          <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200">
-              <h3 className="font-bold text-lg mb-4 text-slate-800">Gerenciar Usuários</h3>
-              
-              <div className="bg-slate-50 p-4 rounded border mb-6 grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                  <div className="md:col-span-1">
-                      <label className="text-xs font-bold block mb-1">Nome</label>
-                      <input className="w-full p-2 border rounded text-sm" value={newUser.nome || ''} onChange={e => setNewUser({...newUser, nome: e.target.value})} />
-                  </div>
-                  <div className="md:col-span-1">
-                      <label className="text-xs font-bold block mb-1">E-mail</label>
-                      <input className="w-full p-2 border rounded text-sm" value={newUser.email || ''} onChange={e => setNewUser({...newUser, email: e.target.value})} />
-                  </div>
-                  <div className="md:col-span-1">
-                      <label className="text-xs font-bold block mb-1">Senha</label>
-                      <PasswordInput className="text-sm" value={newUser.senha || ''} onChange={e => setNewUser({...newUser, senha: e.target.value})} />
-                  </div>
-                  <div className="md:col-span-1">
-                      <label className="text-xs font-bold block mb-1">Perfil</label>
-                      <select className="w-full p-2 border rounded text-sm" value={newUser.perfil} onChange={e => setNewUser({...newUser, perfil: e.target.value as any})}>
-                          <option value="LEITOR">Leitor</option>
-                          <option value="EDITOR">Editor</option>
-                          <option value="ADMIN">Admin</option>
-                      </select>
-                  </div>
-                  <Button onClick={handleAddUser} size="sm">Adicionar</Button>
-              </div>
-
-              <div className="border rounded overflow-hidden">
-                  <table className="w-full text-sm text-left">
-                      <thead className="bg-slate-100 font-bold text-slate-700">
-                          <tr>
-                              <th className="p-3">Nome</th>
-                              <th className="p-3">E-mail</th>
-                              <th className="p-3">Perfil</th>
-                              <th className="p-3 text-right">Ações</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                          {data.users.map((u, i) => (
-                              <tr key={i} className="hover:bg-slate-50">
-                                  <td className="p-3">{u.nome}</td>
-                                  <td className="p-3">{u.email}</td>
-                                  <td className="p-3"><span className="text-xs bg-slate-200 px-2 py-1 rounded font-bold">{u.perfil}</span></td>
-                                  <td className="p-3 text-right">
-                                      <button onClick={() => handleDeleteUser(u.email)} className="text-red-600 hover:underline text-xs font-bold">Excluir</button>
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
-                  </table>
-              </div>
-          </div>
-      )}
 
       {activeSubTab === 'import' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">Importação via Planilha</h3>
-          <p className="text-sm text-slate-600 mb-4">Selecione um arquivo Excel contendo as colunas: Perspectiva, Objetivo, Indicador e Gestor.</p>
-          <input type="file" accept=".xlsx" onChange={handleFileImport} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-          {importReport && <div className="mt-4 p-4 bg-green-50 text-green-800 rounded border border-green-200 text-sm">{importReport}</div>}
+          {!showPreview ? (
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div>
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="bg-green-100 p-2 rounded text-green-700 text-2xl"><i className="ph ph-microsoft-excel-logo"></i></div>
+                    <div><h3 className="text-lg font-bold text-slate-800">Importar Dados</h3><p className="text-xs text-slate-500">Planilhas .xlsx</p></div>
+                  </div>
+                  <div className="p-6 border-2 border-dashed border-blue-200 rounded-lg bg-blue-50 text-center hover:bg-blue-100 transition-colors relative cursor-pointer mb-4">
+                    <input ref={fileInputRef} type="file" accept=".xlsx, .xls" onChange={handleFileImport} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+                    <i className="ph ph-upload-simple text-3xl text-blue-400 mb-2"></i>
+                    <p className="text-blue-800 font-bold text-sm">Clique para carregar</p>
+                  </div>
+                  <div className="text-xs text-slate-500 bg-slate-100 p-3 rounded">
+                    <strong>Colunas:</strong> Perspectiva, Objetivo, Indicador.<br/>
+                    <span className="text-slate-400 italic">O sistema detecta automaticamente o cabeçalho.</span>
+                  </div>
+              </div>
+              <div className="flex flex-col gap-4 border-l pl-8">
+                  <h3 className="text-lg font-bold text-slate-800">Ações</h3>
+                  <div className="space-y-3">
+                      <Button onClick={handleExportData} type="button" variant="secondary" className="w-full gap-2"><i className="ph ph-download-simple"></i> Backup (.xlsx)</Button>
+                      <hr className="my-2"/>
+                      <Button onClick={handleClearDatabase} type="button" className="w-full gap-2 bg-red-100 text-red-700 hover:bg-red-200 border-red-200"><i className="ph ph-trash"></i> Limpar Tudo</Button>
+                  </div>
+              </div>
+             </div>
+          ) : (
+            <div className="animate-fade-in">
+               <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-lg text-slate-800">Pré-visualização da Importação</h3>
+                  <div className="flex gap-2">
+                     <Button variant="secondary" onClick={cancelImport}>Cancelar</Button>
+                     <Button variant="success" onClick={confirmImport} className="flex items-center gap-2"><i className="ph ph-check"></i> Confirmar Importação</Button>
+                  </div>
+               </div>
+               <div className="bg-slate-50 border rounded p-2 overflow-auto max-h-[400px]">
+                  <table className="w-full text-xs text-left">
+                     <thead className="bg-slate-200 font-bold sticky top-0">
+                        <tr>
+                           <th className="p-2">Perspectiva</th>
+                           <th className="p-2">Objetivo</th>
+                           <th className="p-2">Indicador</th>
+                           <th className="p-2">Gestor</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-200 bg-white">
+                        {previewData.slice(0, 100).map((row, idx) => (
+                           <tr key={idx}>
+                              <td className="p-2">{row.persp}</td>
+                              <td className="p-2">{row.obj}</td>
+                              <td className="p-2 font-medium">{row.ind}</td>
+                              <td className="p-2">{row.mgr}</td>
+                           </tr>
+                        ))}
+                        {previewData.length > 100 && <tr><td colSpan={4} className="p-2 text-center text-slate-400">... e mais {previewData.length - 100} itens</td></tr>}
+                     </tbody>
+                  </table>
+               </div>
+            </div>
+          )}
+
+          {importReport && (
+            <div className="mt-6 p-4 bg-emerald-50 text-emerald-800 rounded border border-emerald-200 text-sm flex items-center gap-3">
+                <i className="ph ph-check-circle text-xl"></i> {importReport}
+            </div>
+          )}
         </div>
       )}
 
       {activeSubTab === 'structure' && (
-        <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <h3 className="font-bold text-lg mb-4 text-slate-700">Gestores</h3>
-                <div className="flex gap-2 mb-2"><input className="flex-1 border p-2 rounded text-sm" placeholder="Nome" value={newManager} onChange={e => setNewManager(e.target.value)} /><Button size="sm" onClick={() => { if(!newManager) return; onUpdate({ ...data, managers: [...data.managers, { id: generateId('MGR'), name: newManager }] }, 'structure'); setNewManager(''); }}>Add</Button></div>
-                <div className="max-h-60 overflow-y-auto border rounded p-2 text-sm bg-slate-50">{data.managers.map(m => <div key={m.id} className="flex justify-between py-1 border-b last:border-0"><span>{m.name}</span><button className="text-red-500 text-xs hover:underline" onClick={() => removeManager(m.id)}>Excluir</button></div>)}</div>
+        <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="border rounded-lg p-4 bg-slate-50">
+                    <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-squares-four"></i> Perspectivas</h3>
+                    <div className="flex gap-2 mb-3">
+                        <input className="flex-1 border p-2 rounded text-sm" placeholder="Nova Perspectiva" value={newPerspName} onChange={e => setNewPerspName(e.target.value)} />
+                        <Button size="sm" type="button" onClick={addPerspective}><i className="ph ph-plus"></i></Button>
+                    </div>
+                    <ul className="bg-white rounded border divide-y max-h-40 overflow-y-auto">
+                        {data.perspectives.map(p => (
+                            <li key={p.id} className="p-2 text-sm flex justify-between items-center hover:bg-slate-50 group">
+                                <span>{p.name}</span>
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleEdit('persp', p.id, p.name)} className="text-blue-600 hover:text-blue-800 p-1"><i className="ph ph-pencil"></i></button>
+                                    <button onClick={() => handleDelete('persp', p.id)} className="text-red-600 hover:text-red-800 p-1"><i className="ph ph-trash"></i></button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                <div className="border rounded-lg p-4 bg-slate-50">
+                    <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-users"></i> Gestores</h3>
+                    <div className="flex gap-2 mb-3">
+                        <input className="flex-1 border p-2 rounded text-sm" placeholder="Novo Gestor" value={newManagerName} onChange={e => setNewManagerName(e.target.value)} />
+                        <Button size="sm" type="button" onClick={addManager}><i className="ph ph-plus"></i></Button>
+                    </div>
+                    <ul className="bg-white rounded border divide-y max-h-40 overflow-y-auto">
+                        {data.managers.map(m => (
+                            <li key={m.id} className="p-2 text-sm flex justify-between items-center hover:bg-slate-50 group">
+                                <span>{m.name}</span>
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleEdit('mgr', m.id, m.name)} className="text-blue-600 hover:text-blue-800 p-1"><i className="ph ph-pencil"></i></button>
+                                    <button onClick={() => handleDelete('mgr', m.id)} className="text-red-600 hover:text-red-800 p-1"><i className="ph ph-trash"></i></button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
-            <div>
-                <h3 className="font-bold text-lg mb-4 text-slate-700">Perspectivas</h3>
-                <div className="flex gap-2 mb-2"><input className="flex-1 border p-2 rounded text-sm" placeholder="Nome" value={newPerspective} onChange={e => setNewPerspective(e.target.value)} /><Button size="sm" onClick={() => { if(!newPerspective) return; onUpdate({ ...data, perspectives: [...data.perspectives, { id: generateId('PERSP'), name: newPerspective }] }, 'structure'); setNewPerspective(''); }}>Add</Button></div>
-                <div className="max-h-60 overflow-y-auto border rounded p-2 text-sm bg-slate-50">{data.perspectives.map(p => <div key={p.id} className="flex justify-between py-1 border-b last:border-0"><span>{p.name}</span><button className="text-red-500 text-xs hover:underline" onClick={() => removePerspective(p.id)}>Excluir</button></div>)}</div>
+            <div className="border rounded-lg p-4 bg-slate-50">
+                <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-target"></i> Objetivos</h3>
+                <div className="flex flex-col md:flex-row gap-2 mb-3 bg-white p-3 rounded border shadow-sm">
+                    <select className="border p-2 rounded text-sm md:w-1/3" value={selectedPerspForObj} onChange={e => setSelectedPerspForObj(e.target.value)}>
+                        <option value="">Selecione a Perspectiva...</option>
+                        {data.perspectives.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    <input className="flex-1 border p-2 rounded text-sm" placeholder="Nome do Objetivo" value={newObjName} onChange={e => setNewObjName(e.target.value)} />
+                    <Button size="sm" type="button" onClick={addObjective} disabled={!selectedPerspForObj}>Adicionar</Button>
+                </div>
+                <div className="bg-white rounded border divide-y max-h-60 overflow-y-auto">
+                    {data.objectives.map(o => (
+                        <div key={o.id} className="p-2 text-sm flex justify-between items-center hover:bg-slate-50 group border-l-4 border-transparent hover:border-blue-500">
+                            <div><span className="font-bold block text-slate-700">{o.name}</span><span className="text-xs text-slate-400">{data.perspectives.find(p => p.id === o.perspectiveId)?.name}</span></div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleEdit('obj', o.id, o.name)} className="text-blue-600 hover:text-blue-800 p-1"><i className="ph ph-pencil"></i></button>
+                                <button onClick={() => handleDelete('obj', o.id)} className="text-red-600 hover:text-red-800 p-1"><i className="ph ph-trash"></i></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
       )}
+
+      {/* GLOBAL REPORT TABLE */}
+      <div className="bg-white rounded border overflow-hidden shadow-sm mt-8">
+        <div className="bg-slate-100 p-3 border-b flex justify-between items-center">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2"><i className="ph ph-table"></i> Dados no Sistema</h3>
+          <span className="text-xs text-slate-500 font-bold">Total: {data.indicators.length}</span>
+        </div>
+        <div className="overflow-x-auto max-h-[500px]">
+          <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b sticky top-0">
+                  <tr>
+                      <th className="p-3">Perspectiva</th>
+                      <th className="p-3">Objetivo</th>
+                      <th className="p-3">Indicador</th>
+                      <th className="p-3">Gestor</th>
+                      <th className="p-3 text-right">Ações</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y">
+                  {data.indicators.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum dado.</td></tr>}
+                  {data.indicators.map(ind => (
+                      <tr key={ind.id} className="hover:bg-blue-50 group">
+                          <td className="p-3 text-xs text-slate-500 align-top">{data.perspectives.find(p => p.id === ind.perspectivaId)?.name}</td>
+                          <td className="p-3 text-xs text-slate-600 align-top">{data.objectives.find(o => o.id === ind.objetivoId)?.name}</td>
+                          <td className="p-3 font-medium text-slate-800 align-top">{ind.name}</td>
+                          <td className="p-3 text-xs text-slate-500 align-top">{data.managers.find(m => m.id === ind.gestorId)?.name || '-'}</td>
+                          <td className="p-3 text-right align-top">
+                              <div className="flex justify-end gap-2">
+                                  <button onClick={() => handleEdit('ind', ind.id, ind.name)} className="text-blue-600 hover:bg-blue-100 p-1 rounded" title="Editar"><i className="ph ph-pencil text-lg"></i></button>
+                                  <button onClick={() => handleDelete('ind', ind.id)} className="text-red-600 hover:bg-red-100 p-1 rounded" title="Excluir"><i className="ph ph-trash text-lg"></i></button>
+                              </div>
+                          </td>
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 };

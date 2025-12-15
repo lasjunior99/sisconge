@@ -7,6 +7,14 @@ interface ManagerPanelProps {
   onUpdate: (newData: AppData) => void;
 }
 
+const UNIT_OPTIONS = ['R$', 'U$', 'mts', '%', 'dias', 'horas', 'num', 'outra'];
+const PERIODICITY_OPTIONS = ['mensal', 'bimestral', 'trimestral', 'quadrimestral', 'semestral', 'anual'];
+const POLARITY_OPTIONS = [
+  { value: 'maior_melhor', label: 'Quanto Maior, Melhor' },
+  { value: 'menor_melhor', label: 'Quanto Menor, Melhor' },
+  { value: 'estavel', label: 'Estável' },
+];
+
 export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) => {
   const [filterManagerId, setFilterManagerId] = useState('');
   const [filterIndicatorId, setFilterIndicatorId] = useState('');
@@ -20,10 +28,10 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
         setFormData({
           description: ind.description,
           formula: ind.formula,
-          unit: ind.unit,
+          unit: ind.unit || 'num',
           source: ind.source,
-          periodicity: ind.periodicity,
-          polarity: ind.polarity
+          periodicity: ind.periodicity || 'mensal',
+          polarity: ind.polarity || 'maior_melhor'
         });
       }
     } else {
@@ -52,7 +60,14 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
 
   const handleDeleteDetails = () => {
     if (!confirm("Limpar detalhes deste indicador?")) return;
-    setFormData({ description: '', formula: '', unit: '', source: '', periodicity: '', polarity: '' });
+    setFormData({ 
+      description: '', 
+      formula: '', 
+      unit: 'num', 
+      source: '', 
+      periodicity: 'mensal', 
+      polarity: 'maior_melhor' 
+    });
   };
 
   const handleInputChange = (field: keyof Indicator, value: string) => {
@@ -115,12 +130,50 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
               
               {isLocked && <div className="p-3 bg-green-50 text-green-800 rounded text-sm border border-green-200">🔒 Indicador Finalizado. Contate o admin para editar.</div>}
 
-              <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-xs font-bold text-slate-500">Unidade</label><input disabled={isLocked} className="w-full p-2 border rounded" value={formData.unit || ''} onChange={e => handleInputChange('unit', e.target.value)} /></div>
-                  <div><label className="text-xs font-bold text-slate-500">Periodicidade</label><input disabled={isLocked} className="w-full p-2 border rounded" value={formData.periodicity || ''} onChange={e => handleInputChange('periodicity', e.target.value)} /></div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* UNIDADE (Select) */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Unidade</label>
+                    <select 
+                      disabled={isLocked} 
+                      className="w-full p-2 border rounded bg-white" 
+                      value={formData.unit || 'num'} 
+                      onChange={e => handleInputChange('unit', e.target.value)}
+                    >
+                      {UNIT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </div>
+
+                  {/* PERIODICIDADE (Select) */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Periodicidade</label>
+                    <select 
+                      disabled={isLocked} 
+                      className="w-full p-2 border rounded bg-white" 
+                      value={formData.periodicity || 'mensal'} 
+                      onChange={e => handleInputChange('periodicity', e.target.value)}
+                    >
+                      {PERIODICITY_OPTIONS.map(opt => <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>)}
+                    </select>
+                  </div>
+
+                  {/* POLARIDADE (Select) */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Polaridade</label>
+                    <select 
+                      disabled={isLocked} 
+                      className="w-full p-2 border rounded bg-white" 
+                      value={formData.polarity || 'maior_melhor'} 
+                      onChange={e => handleInputChange('polarity', e.target.value)}
+                    >
+                      {POLARITY_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
               </div>
+
               <div><label className="text-xs font-bold text-slate-500">Descrição</label><textarea disabled={isLocked} className="w-full p-2 border rounded h-20" value={formData.description || ''} onChange={e => handleInputChange('description', e.target.value)} /></div>
-              <div><label className="text-xs font-bold text-slate-500">Fórmula</label><textarea disabled={isLocked} className="w-full p-2 border rounded h-16" value={formData.formula || ''} onChange={e => handleInputChange('formula', e.target.value)} /></div>
+              <div><label className="text-xs font-bold text-slate-500">Fórmula de Cálculo</label><textarea disabled={isLocked} className="w-full p-2 border rounded h-16" value={formData.formula || ''} onChange={e => handleInputChange('formula', e.target.value)} /></div>
+              <div><label className="text-xs font-bold text-slate-500">Fonte de Dados</label><input disabled={isLocked} className="w-full p-2 border rounded" value={formData.source || ''} onChange={e => handleInputChange('source', e.target.value)} /></div>
               
               {!isLocked && (
                   <div className="pt-4 flex gap-2 border-t mt-4">

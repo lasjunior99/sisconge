@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppData, Goal, Indicator } from '../types';
 import { Button } from './ui/Button';
+import { excelParser } from '../services/apiService';
 
 interface GoalsPanelProps {
   data: AppData;
@@ -24,6 +25,9 @@ export const GoalsPanel: React.FC<GoalsPanelProps> = ({ data, onUpdate }) => {
   const [semYellow, setSemYellow] = useState('');
   const [semRed, setSemRed] = useState('');
   const [calcType, setCalcType] = useState<'isolated'|'accumulated'|'average'>('isolated');
+
+  // Import Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (selInd) {
@@ -102,8 +106,27 @@ export const GoalsPanel: React.FC<GoalsPanelProps> = ({ data, onUpdate }) => {
       goals: updatedGoals,
       indicators: updatedIndicators
     });
+    // Removed native alert. Feedback is handled via onUpdate calling apiService
+  };
+
+  const handleDeleteGoal = () => {
+    if (!currentInd || !currentGoal) return;
+    if (!confirm(`Tem certeza que deseja excluir todas as metas de "${currentInd.name}"?`)) return;
+
+    const filteredGoals = data.goals.filter(g => g.indicatorId !== currentInd.id);
+    onUpdate({ ...data, goals: filteredGoals });
     
-    alert('Metas e Configurações salvas!');
+    // Reset local state (as if new)
+    const thisYear = new Date().getFullYear();
+    setCurrentGoal({
+        id: 'GOAL-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+        indicatorId: currentInd.id,
+        year: thisYear,
+        history: [{ year: thisYear - 3, value: '' }, { year: thisYear - 2, value: '' }, { year: thisYear - 1, value: '' }],
+        monthlyValues: Array(12).fill('')
+    });
+    
+    // Removed native alert. Feedback is handled via onUpdate calling apiService
   };
 
   const updateMonthly = (idx: number, val: string) => {
@@ -126,6 +149,97 @@ export const GoalsPanel: React.FC<GoalsPanelProps> = ({ data, onUpdate }) => {
     setSelInd('');
   };
 
+  // --- IMPORT EXCEL ---
+  const handleImportGoals = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const rows = await excelParser.parse(file);
+      if (!rows || rows.length < 2) return alert("Planilha vazia ou sem dados.");
+
+      // Identify Columns
+      const header = rows[0].map((c: string) => String(c || '').trim().toLowerCase());
+      const idxInd = header.findIndex((h: string) => h.includes('indicador') || h.includes('nome'));
+      
+      if (idxInd === -1) {
+        return alert("Não foi encontrada a coluna 'Indicador'. Verifique o modelo.");
+      }
+
+      // Finds columns for Jan..Dec
+      const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+      const idxMonths = months.map(m => header.findIndex((h: string) => h.includes(m)));
+
+      let updatedGoals = [...data.goals];
+      let count = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const indName = row[idxInd];
+        if (!indName) continue;
+
+        const ind = data.indicators.find(ii => ii.name.trim().toLowerCase() === String(indName).trim().toLowerCase());
+        if (!ind) continue; // Indicator not found
+
+        // Create or Update Goal
+        const thisYear = new Date().getFullYear();
+        let goal = updatedGoals.find(g => g.indicatorId === ind.id);
+        
+        // Extract Monthly Values
+        const newMonthly = idxMonths.map(idx => (idx !== -1 && row[idx] !== undefined) ? String(row[idx]) : '');
+
+        if (goal) {
+           goal = { ...goal, monthlyValues: newMonthly }; // Update existing
+           updatedGoals = updatedGoals.map(g => g.id === goal!.id ? goal! : g);
+        } else {
+           goal = {
+             id: 'GOAL-' + Math.random().toString(36).substr(2, 9),
+             indicatorId: ind.id,
+             year: thisYear,
+             history: [],
+             monthlyValues: newMonthly
+           };
+           updatedGoals.push(goal);
+        }
+        count++;
+      }
+
+      onUpdate({ ...data, goals: updatedGoals });
+      // Removed alert, feedback handled by API toast
+
+    } catch (err: any) {
+      alert("Erro na importação: " + err.message);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // --- EXPORT EXCEL ---
+  const handleExportGoals = () => {
+    const XLSX = window.XLSX;
+    if (!XLSX) return alert("Biblioteca XLSX não carregada.");
+
+    const rows = data.indicators.map(ind => {
+      const goal = data.goals.find(g => g.indicatorId === ind.id);
+      const row: any = {
+        'Indicador': ind.name,
+        'Ano': new Date().getFullYear()
+      };
+      
+      const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      months.forEach((m, idx) => {
+        row[m] = goal?.monthlyValues[idx] || '';
+      });
+
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Metas");
+    XLSX.writeFile(wb, "Cadastro_Metas.xlsx");
+  };
+
   // Derived lists for selects
   const filteredObjectives = data.objectives.filter(o => !selPersp || o.perspectiveId === selPersp);
   const filteredIndicators = data.indicators.filter(i => (!selObj || i.objetivoId === selObj) && (!selPersp || i.perspectivaId === selPersp));
@@ -135,7 +249,18 @@ export const GoalsPanel: React.FC<GoalsPanelProps> = ({ data, onUpdate }) => {
 
   return (
     <div className="pb-10">
-      <h2 className="text-2xl font-bold text-blue-900 mb-6">Cadastro de Metas</h2>
+      <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-blue-900">Cadastro de Metas</h2>
+          <div className="flex gap-2">
+              <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportGoals} />
+              <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                 <i className="ph ph-upload-simple"></i> Importar Excel
+              </Button>
+              <Button size="sm" variant="secondary" onClick={handleExportGoals}>
+                 <i className="ph ph-download-simple"></i> Exportar Excel
+              </Button>
+          </div>
+      </div>
       
       {!hasStructure && (
         <div className="p-4 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded mb-6">
@@ -293,8 +418,13 @@ export const GoalsPanel: React.FC<GoalsPanelProps> = ({ data, onUpdate }) => {
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button size="md" onClick={handleSave}>Salvar Metas</Button>
+          <div className="flex justify-between border-t pt-4">
+            <Button size="md" variant="danger" onClick={handleDeleteGoal} className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:text-red-700">
+               <i className="ph ph-trash"></i> Excluir Metas
+            </Button>
+            <Button size="md" onClick={handleSave} className="flex items-center gap-2">
+               <i className="ph ph-floppy-disk"></i> Salvar Metas e Configurações
+            </Button>
           </div>
 
         </div>

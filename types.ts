@@ -54,7 +54,29 @@ export interface User {
   senha?: string; // Usado apenas na edição, nunca exposto em logs
 }
 
+// --- NOVAS INTERFACES ---
+export interface StrategicIdentity {
+  companyName: string;
+  logoUrl: string;
+  purpose: string;
+  business: string;
+  mission: string;
+  vision: string;
+  values: string;
+  horizonStart?: number; // Novo campo
+  horizonEnd?: number;   // Novo campo
+}
+
+export interface VisionMilestone {
+  id: string;
+  year: number;
+  description: string;
+}
+// -----------------------
+
 export interface AppData {
+  identity: StrategicIdentity; 
+  visionLine: VisionMilestone[];
   perspectives: Perspective[];
   managers: Manager[];
   objectives: Objective[];
@@ -64,6 +86,18 @@ export interface AppData {
 }
 
 export const INITIAL_DATA: AppData = {
+  identity: {
+    companyName: '',
+    logoUrl: '',
+    purpose: '',
+    business: '',
+    mission: '',
+    vision: '',
+    values: '',
+    horizonStart: new Date().getFullYear(),
+    horizonEnd: new Date().getFullYear() + 4
+  },
+  visionLine: [],
   perspectives: [],
   managers: [],
   objectives: [],
