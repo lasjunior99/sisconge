@@ -2,19 +2,22 @@ import React, { useState, useRef } from 'react';
 import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA } from '../types';
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
+import { PasswordInput } from './ui/PasswordInput';
 
 interface AdminPanelProps {
   data: AppData;
   user: User;
   onUpdate: (newData: AppData, section: any) => void;
+  onClose?: () => void;
 }
 
-type TabMode = 'structure' | 'import';
+type TabMode = 'structure' | 'import' | 'security';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   data, 
   user,
-  onUpdate 
+  onUpdate,
+  onClose
 }) => {
   // --- Tab State ---
   const [activeSubTab, setActiveSubTab] = useState<TabMode>('structure');
@@ -32,6 +35,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newManagerName, setNewManagerName] = useState('');
   const [newObjName, setNewObjName] = useState('');
   const [selectedPerspForObj, setSelectedPerspForObj] = useState('');
+
+  // --- Security State ---
+  const [passData, setPassData] = useState({ current: '', new: '', confirm: '' });
 
   const generateId = (prefix: string) => `${prefix}-` + Math.random().toString(36).substr(2, 9).toUpperCase();
   const normalizeKey = (str: string) => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
@@ -84,6 +90,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (!newObjName.trim() || !selectedPerspForObj) return;
     onUpdate({ ...data, objectives: [...data.objectives, { id: generateId('OBJ'), name: newObjName.trim(), perspectiveId: selectedPerspForObj, gestorId: '' }] }, 'structure');
     setNewObjName('');
+  };
+
+  // --- PASSWORD CHANGE LOGIC ---
+  const handleChangePassword = () => {
+    if (!passData.current || !passData.new || !passData.confirm) {
+        alert("Preencha todos os campos.");
+        return;
+    }
+    
+    const validPass = data.adminPassword || '123456';
+    if (passData.current !== validPass) {
+        alert("A senha atual está incorreta.");
+        return;
+    }
+
+    if (passData.new !== passData.confirm) {
+        alert("A nova senha e a confirmação não coincidem.");
+        return;
+    }
+
+    if (passData.new.length < 4) {
+        alert("A senha deve ter pelo menos 4 caracteres.");
+        return;
+    }
+
+    if (confirm("Deseja realmente alterar a senha de administrador?")) {
+        onUpdate({ ...data, adminPassword: passData.new }, 'settings');
+        setPassData({ current: '', new: '', confirm: '' });
+    }
   };
 
   // --- IMPORT LOGIC ---
@@ -254,7 +289,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleClearDatabase = () => {
     if (confirm("⚠️ ATENÇÃO: Deseja apagar TODOS os dados do sistema?\n\nIsso excluirá permanentemente indicadores, metas e histórico.")) {
-        onUpdate({ ...INITIAL_DATA, users: data.users }, 'structure');
+        onUpdate({ ...INITIAL_DATA, users: data.users, adminPassword: data.adminPassword }, 'structure');
         setImportReport("Base de dados limpa com sucesso.");
         setPreviewData([]);
         setShowPreview(false);
@@ -265,13 +300,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     <div className="space-y-6 pb-10">
       <div className="flex justify-between items-center border-b pb-4 bg-white p-4 rounded shadow-sm">
         <h2 className="text-2xl font-bold text-blue-900 flex items-center gap-2"><i className="ph ph-shield-check"></i> Painel do Administrador</h2>
-        {/* Sair button removed */}
+        
+        {onClose && (
+          <Button variant="danger" size="sm" onClick={onClose} className="flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 hover:bg-red-200">
+             <i className="ph ph-sign-out"></i> Sair do Admin
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-2 border-b border-slate-200 pb-1 overflow-x-auto">
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'structure' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('structure')}>🛠️ Manual</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'import' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('import')}>📥 Importação</button>
+        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'security' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('security')}>🔒 Segurança</button>
       </div>
+
+      {activeSubTab === 'security' && (
+        <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
+           <h3 className="font-bold text-lg mb-4 text-slate-800">Alterar Senha de Acesso</h3>
+           <div className="max-w-md space-y-4">
+              <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Senha Atual</label>
+                  <PasswordInput value={passData.current} onChange={e => setPassData({...passData, current: e.target.value})} />
+              </div>
+              <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Nova Senha</label>
+                  <PasswordInput value={passData.new} onChange={e => setPassData({...passData, new: e.target.value})} />
+              </div>
+              <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Confirmar Nova Senha</label>
+                  <PasswordInput value={passData.confirm} onChange={e => setPassData({...passData, confirm: e.target.value})} />
+              </div>
+              <div className="pt-2">
+                 <Button onClick={handleChangePassword}>Salvar Nova Senha</Button>
+              </div>
+           </div>
+        </div>
+      )}
 
       {activeSubTab === 'import' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200">

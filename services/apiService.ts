@@ -112,6 +112,7 @@ export const apiService = {
       const incoming = res.data || res;
       
       return {
+        adminPassword: incoming.adminPassword || INITIAL_DATA.adminPassword,
         identity: incoming.identity || INITIAL_DATA.identity,
         visionLine: incoming.visionLine || INITIAL_DATA.visionLine,
         perspectives: incoming.perspectives || INITIAL_DATA.perspectives,
@@ -178,6 +179,17 @@ export const apiService = {
     try {
       await request('save_users', users, user);
       notifyFn("Usuários atualizados!", "success");
+    } catch (e: any) {
+      notifyFn(`Erro: ${e.message}`, "error");
+    }
+  },
+
+  saveAdminSettings: async (settings: { adminPassword: string }, user: User) => {
+    notifyFn("Atualizando configurações...", "loading");
+    try {
+      // Usa uma ação específica ou reaproveita save_users se o backend não suportar save_settings
+      await request('save_admin_settings', settings, user);
+      notifyFn("Senha de administrador atualizada!", "success");
     } catch (e: any) {
       notifyFn(`Erro: ${e.message}`, "error");
     }

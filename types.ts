@@ -1,3 +1,4 @@
+
 export interface Perspective {
   id: string;
   name: string;
@@ -75,6 +76,7 @@ export interface VisionMilestone {
 // -----------------------
 
 export interface AppData {
+  adminPassword?: string; // Senha global do admin
   identity: StrategicIdentity; 
   visionLine: VisionMilestone[];
   perspectives: Perspective[];
@@ -86,6 +88,7 @@ export interface AppData {
 }
 
 export const INITIAL_DATA: AppData = {
+  adminPassword: '123456', // Senha provisória padrão
   identity: {
     companyName: '',
     logoUrl: '',

@@ -9,9 +9,10 @@ import { AppData, INITIAL_DATA, User } from './types';
 import { apiService, setNotificationHandler } from './services/apiService';
 import { NotificationToast, NotificationType } from './components/ui/NotificationToast';
 import { Button } from './components/ui/Button';
+import { PasswordInput } from './components/ui/PasswordInput';
 
 enum Tab {
-  VISION = 'vision', // Nova aba
+  VISION = 'vision',
   MANAGER = 'manager',
   GOALS = 'goals',
   ADMIN = 'admin',
@@ -28,8 +29,12 @@ const DEFAULT_USER: User = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>(Tab.VISION); // Inicia na Visão
+  const [activeTab, setActiveTab] = useState<Tab>(Tab.VISION);
   const [appData, setAppData] = useState<AppData>(INITIAL_DATA);
+  
+  // Controle de Bloqueio do Admin
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminPassInput, setAdminPassInput] = useState('');
   
   // Define o usuário padrão imediatamente (Autologin)
   const [currentUser, setCurrentUser] = useState<User>(DEFAULT_USER);
@@ -53,7 +58,7 @@ export default function App() {
   };
 
   // Generic Update Handler (Optimistic UI + API Call)
-  const handleUpdate = async (newData: AppData, section: 'structure' | 'indicators' | 'goals' | 'users' | 'vision') => {
+  const handleUpdate = async (newData: AppData, section: 'structure' | 'indicators' | 'goals' | 'users' | 'vision' | 'settings') => {
     if (!currentUser) return;
     
     // Optimistic Update
@@ -72,12 +77,28 @@ export default function App() {
         break;
       case 'goals':
         await apiService.saveGoals(newData.goals, currentUser);
-        // Indicators are also updated when goals change (meta config), so save them too
         await apiService.saveIndicators(newData.indicators, currentUser);
         break;
       case 'users':
         await apiService.saveUsers(newData.users, currentUser);
         break;
+      case 'settings':
+        if (newData.adminPassword) {
+            await apiService.saveAdminSettings({ adminPassword: newData.adminPassword }, currentUser);
+        }
+        break;
+    }
+  };
+
+  const attemptAdminUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Verifica se a senha bate com a salva (ou o padrão 123456)
+    const validPass = appData.adminPassword || '123456';
+    if (adminPassInput === validPass) {
+        setAdminUnlocked(true);
+        setAdminPassInput('');
+    } else {
+        setNotification({ msg: "Senha incorreta.", type: 'error' });
     }
   };
 
@@ -137,8 +158,6 @@ export default function App() {
             </>
           )}
 
-          {/* Informações de usuário removidas conforme solicitado */}
-
         </div>
       </header>
 
@@ -166,11 +185,39 @@ export default function App() {
         )}
         
         {activeTab === Tab.ADMIN && (
-          <AdminPanel 
-            data={appData} 
-            user={currentUser}
-            onUpdate={handleUpdate} 
-          />
+          <>
+            {!adminUnlocked ? (
+              <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+                  <div className="bg-white p-8 rounded-lg shadow-lg border border-slate-200 max-w-md w-full text-center">
+                      <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                          <i className="ph ph-lock-key text-3xl"></i>
+                      </div>
+                      <h2 className="text-2xl font-bold text-slate-800 mb-2">Acesso Restrito</h2>
+                      <p className="text-slate-500 mb-6 text-sm">Esta área é exclusiva para administradores do sistema.</p>
+                      
+                      <form onSubmit={attemptAdminUnlock} className="space-y-4">
+                          <PasswordInput 
+                             placeholder="Senha de Acesso" 
+                             value={adminPassInput}
+                             onChange={e => setAdminPassInput(e.target.value)}
+                             autoFocus
+                          />
+                          <Button type="submit" className="w-full">
+                             <i className="ph ph-sign-in"></i> Entrar no Painel
+                          </Button>
+                      </form>
+                      <p className="text-xs text-slate-400 mt-4">Senha provisória padrão: <strong>123456</strong></p>
+                  </div>
+              </div>
+            ) : (
+              <AdminPanel 
+                data={appData} 
+                user={currentUser}
+                onUpdate={handleUpdate} 
+                onClose={() => setAdminUnlocked(false)}
+              />
+            )}
+          </>
         )}
 
         {activeTab === Tab.RESULTS && (
@@ -180,31 +227,78 @@ export default function App() {
         {activeTab === Tab.GUIDE && (
           <div className="bg-white p-8 rounded-lg shadow-sm border border-slate-200 prose max-w-none text-slate-600">
             <h2 className="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-2 border-b pb-4">
-              <Logo className="w-6 h-6" /> Manual de Orientações v2.0
+              <Logo className="w-6 h-6" /> Manual de Orientações do Usuário
             </h2>
             
-            <div className="p-4 bg-blue-50 border-l-4 border-blue-500 rounded mb-6 text-sm text-blue-800 shadow-sm">
-               <h4 className="font-bold mb-1 flex items-center gap-2"><i className="ph ph-cloud-check text-lg"></i> Sistema Conectado</h4>
-               <p>O SISCONGE v2.0 opera em nuvem. Todos os dados são salvos automaticamente no banco de dados institucional (Google Sheets).</p>
-            </div>
-
-            <h3 className="text-lg font-bold text-slate-800 mt-6 mb-2">Modo Administrativo</h3>
-            <p className="text-sm">
-              O sistema está operando em modo de acesso direto. Todas as funcionalidades de edição e administração estão liberadas.
+            <p className="lead text-lg text-slate-700">
+              Bem-vindo ao <strong>SISCONGE</strong>. Este sistema foi desenhado para facilitar a gestão estratégica e o acompanhamento de indicadores de desempenho. Siga o guia abaixo para alimentar e gerenciar seus dados corretamente.
             </p>
 
-            <h3 className="text-lg font-bold text-slate-800 mt-6 mb-2">Como usar</h3>
-            <ol className="list-decimal pl-5 mb-4 space-y-2">
-                <li><strong>Visão de Futuro:</strong> Defina a identidade da empresa e a linha do tempo estratégica.</li>
-                <li><strong>Ficha Técnica:</strong> Consulte e edite os detalhes de cada indicador (Unidade, Polaridade, etc).</li>
-                <li><strong>Metas:</strong> Defina as metas mensais ou importe via Excel.</li>
-                <li><strong>Resultados:</strong> Acompanhe o desempenho consolidado e exporte relatórios Excel.</li>
-                <li><strong>Admin:</strong> Importe planilhas de estrutura ou cadastre manualmente.</li>
-            </ol>
-            
-            <div className="mt-8 pt-4 border-t text-xs text-slate-400">
-               <p>Status da Conexão: <span className="text-green-600 font-bold">● Ativa</span></p>
-               <p>Em caso de falhas, o sistema notificará automaticamente.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+                
+                {/* BLOCO 1 */}
+                <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
+                    <h3 className="font-bold text-blue-900 text-lg flex items-center gap-2 mb-3">
+                        <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                        Visão de Futuro
+                    </h3>
+                    <p className="text-sm mb-3">Aqui você define a identidade visual e estratégica da empresa.</p>
+                    <ul className="text-sm space-y-2 list-disc pl-5">
+                        <li><strong>Identidade:</strong> Carregue o logotipo, nome da empresa e defina Missão, Visão e Valores.</li>
+                        <li><strong>Linha da Visão:</strong> Adicione marcos temporais (anos) e descreva o objetivo principal para cada ano (Máximo 5 anos).</li>
+                        <li><strong>One Page:</strong> Visualize o resumo estratégico em uma página e exporte para PDF para apresentações.</li>
+                    </ul>
+                </div>
+
+                {/* BLOCO 2 */}
+                <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
+                    <h3 className="font-bold text-blue-900 text-lg flex items-center gap-2 mb-3">
+                        <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+                        Admin (Estrutura)
+                    </h3>
+                    <p className="text-sm mb-3 text-red-600 font-bold">⚠️ Comece por aqui se o sistema estiver vazio!</p>
+                    <ul className="text-sm space-y-2 list-disc pl-5">
+                        <li><strong>Acesso:</strong> Use a senha padrão (123456) para entrar.</li>
+                        <li><strong>Manual:</strong> Cadastre Perspectivas, Gestores e Objetivos manualmente usando os botões "+".</li>
+                        <li><strong>Importação:</strong> Use uma planilha Excel (.xlsx) contendo as colunas <em>Perspectiva, Objetivo, Indicador</em> e <em>Gestor</em> para carregar tudo de uma vez.</li>
+                        <li><strong>Segurança:</strong> Altere a senha de acesso na aba "Segurança".</li>
+                    </ul>
+                </div>
+
+                {/* BLOCO 3 */}
+                <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
+                    <h3 className="font-bold text-blue-900 text-lg flex items-center gap-2 mb-3">
+                        <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                        Ficha Técnica
+                    </h3>
+                    <p className="text-sm mb-3">Detalhe as regras de negócio de cada indicador cadastrado.</p>
+                    <ul className="text-sm space-y-2 list-disc pl-5">
+                        <li>Selecione um indicador na lista lateral.</li>
+                        <li>Defina a <strong>Unidade de Medida</strong> (%, R$, Un), a <strong>Periodicidade</strong> e a <strong>Polaridade</strong> (ex: "Quanto maior, melhor").</li>
+                        <li>Escreva a fórmula de cálculo e a fonte de dados.</li>
+                        <li>Clique em "Finalizar" para marcar o indicador como pronto (ícone verde).</li>
+                    </ul>
+                </div>
+
+                {/* BLOCO 4 */}
+                <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
+                    <h3 className="font-bold text-blue-900 text-lg flex items-center gap-2 mb-3">
+                        <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">4</span>
+                        Metas
+                    </h3>
+                    <p className="text-sm mb-3">Lance os valores históricos e as metas futuras.</p>
+                    <ul className="text-sm space-y-2 list-disc pl-5">
+                        <li>Utilize os filtros no topo para encontrar o indicador desejado.</li>
+                        <li><strong>Configuração:</strong> Defina o tipo de cálculo (Isolado/Acumulado) e as faixas do farol (Semáforo).</li>
+                        <li><strong>Valores:</strong> Preencha o histórico dos últimos 3 anos e as metas mês a mês do ano atual.</li>
+                        <li>Salve as alterações para que os dados apareçam nos relatórios.</li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+               <strong>Dica Importante:</strong> Sempre clique no botão <strong>"Salvar"</strong> ao final de cada edição. O sistema notifica com uma mensagem verde no canto da tela quando os dados são gravados com sucesso na nuvem.
             </div>
           </div>
         )}
