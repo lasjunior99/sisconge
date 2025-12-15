@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA } from '../types';
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
@@ -11,7 +11,7 @@ interface AdminPanelProps {
   onClose?: () => void;
 }
 
-type TabMode = 'structure' | 'import' | 'security';
+type TabMode = 'structure' | 'import' | 'security' | 'config';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   data, 
@@ -38,6 +38,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // --- Security State ---
   const [passData, setPassData] = useState({ current: '', new: '', confirm: '' });
+
+  // --- Global Config State ---
+  const [globalSem, setGlobalSem] = useState({ blue: '', green: '', yellow: '', red: '' });
+
+  useEffect(() => {
+    if (data.globalSettings && data.globalSettings.semaphore) {
+      setGlobalSem(data.globalSettings.semaphore);
+    } else {
+      setGlobalSem(INITIAL_DATA.globalSettings?.semaphore || { blue: '', green: '', yellow: '', red: '' });
+    }
+  }, [data.globalSettings]);
 
   const generateId = (prefix: string) => `${prefix}-` + Math.random().toString(36).substr(2, 9).toUpperCase();
   const normalizeKey = (str: string) => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
@@ -119,6 +130,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         onUpdate({ ...data, adminPassword: passData.new }, 'settings');
         setPassData({ current: '', new: '', confirm: '' });
     }
+  };
+
+  // --- GLOBAL CONFIG SAVE ---
+  const handleSaveGlobalConfig = () => {
+    onUpdate({
+      ...data,
+      globalSettings: {
+        ...data.globalSettings,
+        semaphore: globalSem
+      }
+    }, 'settings');
   };
 
   // --- IMPORT LOGIC ---
@@ -311,8 +333,61 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       <div className="flex gap-2 border-b border-slate-200 pb-1 overflow-x-auto">
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'structure' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('structure')}>🛠️ Manual</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'import' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('import')}>📥 Importação</button>
+        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'config' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('config')}>⚙️ Configurações</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'security' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('security')}>🔒 Segurança</button>
       </div>
+
+      {activeSubTab === 'config' && (
+        <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
+           <h3 className="font-bold text-lg mb-4 text-slate-800">Configurações Globais</h3>
+           <p className="text-sm text-slate-500 mb-6">Defina os valores padrão para o semáforo de desempenho. Esses valores serão aplicados a novos indicadores ou àqueles que não possuírem regras específicas.</p>
+           
+           <div className="p-6 bg-slate-50 border border-slate-200 rounded-lg max-w-4xl">
+              <label className="block text-sm font-bold text-slate-700 mb-4 border-b pb-2">Farol de Desempenho (Semáforo) - Padrão Geral</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="bg-white p-3 rounded border border-blue-100 shadow-sm">
+                    <span className="block text-xs text-blue-600 font-bold mb-1">Azul (Superação)</span>
+                    <input 
+                      className="w-full border p-2 rounded text-sm font-medium text-blue-900" 
+                      placeholder="Ex: Acima de 110%" 
+                      value={globalSem.blue} 
+                      onChange={e => setGlobalSem({...globalSem, blue: e.target.value})} 
+                    />
+                 </div>
+                 <div className="bg-white p-3 rounded border border-green-100 shadow-sm">
+                    <span className="block text-xs text-green-600 font-bold mb-1">Verde (Meta)</span>
+                    <input 
+                      className="w-full border p-2 rounded text-sm font-medium text-green-900" 
+                      placeholder="Ex: De 100% a 110%" 
+                      value={globalSem.green} 
+                      onChange={e => setGlobalSem({...globalSem, green: e.target.value})} 
+                    />
+                 </div>
+                 <div className="bg-white p-3 rounded border border-yellow-100 shadow-sm">
+                    <span className="block text-xs text-yellow-600 font-bold mb-1">Amarelo (Atenção)</span>
+                    <input 
+                      className="w-full border p-2 rounded text-sm font-medium text-yellow-900" 
+                      placeholder="Ex: De 90% a 99%" 
+                      value={globalSem.yellow} 
+                      onChange={e => setGlobalSem({...globalSem, yellow: e.target.value})} 
+                    />
+                 </div>
+                 <div className="bg-white p-3 rounded border border-red-100 shadow-sm">
+                    <span className="block text-xs text-red-600 font-bold mb-1">Vermelho (Crítico)</span>
+                    <input 
+                      className="w-full border p-2 rounded text-sm font-medium text-red-900" 
+                      placeholder="Ex: Abaixo de 90%" 
+                      value={globalSem.red} 
+                      onChange={e => setGlobalSem({...globalSem, red: e.target.value})} 
+                    />
+                 </div>
+              </div>
+              <div className="mt-6 flex justify-end">
+                 <Button onClick={handleSaveGlobalConfig} className="flex items-center gap-2"><i className="ph ph-floppy-disk"></i> Salvar Padrões</Button>
+              </div>
+           </div>
+        </div>
+      )}
 
       {activeSubTab === 'security' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
@@ -337,6 +412,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
+      {/* Rest of the component (import and structure tabs) remains unchanged, just re-rendering to include navigation updates */}
       {activeSubTab === 'import' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200">
           {!showPreview ? (

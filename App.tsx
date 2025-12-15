@@ -83,9 +83,12 @@ export default function App() {
         await apiService.saveUsers(newData.users, currentUser);
         break;
       case 'settings':
-        if (newData.adminPassword) {
-            await apiService.saveAdminSettings({ adminPassword: newData.adminPassword }, currentUser);
-        }
+        // Save both password and global settings if they exist
+        const settingsPayload: any = {};
+        if (newData.adminPassword) settingsPayload.adminPassword = newData.adminPassword;
+        if (newData.globalSettings) settingsPayload.globalSettings = newData.globalSettings;
+        
+        await apiService.saveAdminSettings(settingsPayload, currentUser);
         break;
     }
   };
@@ -261,6 +264,7 @@ export default function App() {
                         <li><strong>Acesso:</strong> Use a senha padrão (123456) para entrar.</li>
                         <li><strong>Manual:</strong> Cadastre Perspectivas, Gestores e Objetivos manualmente usando os botões "+".</li>
                         <li><strong>Importação:</strong> Use uma planilha Excel (.xlsx) contendo as colunas <em>Perspectiva, Objetivo, Indicador</em> e <em>Gestor</em> para carregar tudo de uma vez.</li>
+                        <li><strong>Configurações:</strong> Defina o padrão global para o Farol de Desempenho (Semáforo).</li>
                         <li><strong>Segurança:</strong> Altere a senha de acesso na aba "Segurança".</li>
                     </ul>
                 </div>
@@ -276,6 +280,7 @@ export default function App() {
                         <li>Selecione um indicador na lista lateral.</li>
                         <li>Defina a <strong>Unidade de Medida</strong> (%, R$, Un), a <strong>Periodicidade</strong> e a <strong>Polaridade</strong> (ex: "Quanto maior, melhor").</li>
                         <li>Escreva a fórmula de cálculo e a fonte de dados.</li>
+                        <li>Se os campos do farol (semáforo) estiverem vazios, o sistema assumirá o padrão do administrador.</li>
                         <li>Clique em "Finalizar" para marcar o indicador como pronto (ícone verde).</li>
                     </ul>
                 </div>

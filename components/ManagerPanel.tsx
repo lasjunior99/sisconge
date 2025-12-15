@@ -19,7 +19,12 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
   const [filterManagerId, setFilterManagerId] = useState('');
   const [filterIndicatorId, setFilterIndicatorId] = useState('');
   const [selectedIndicatorId, setSelectedIndicatorId] = useState<string | null>(null);
+  
+  // Form State
   const [formData, setFormData] = useState<Partial<Indicator>>({});
+  
+  // Semaphore Local State (to handle nested object)
+  const [sem, setSem] = useState({ blue: '', green: '', yellow: '', red: '' });
 
   useEffect(() => {
     if (selectedIndicatorId) {
@@ -31,13 +36,28 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
           unit: ind.unit || 'num',
           source: ind.source,
           periodicity: ind.periodicity || 'mensal',
-          polarity: ind.polarity || 'maior_melhor'
+          polarity: ind.polarity || 'maior_melhor',
+          calcType: ind.calcType || 'isolated'
         });
+        
+        // Verifica se o indicador tem semáforo preenchido. Se não tiver nenhum valor, usa o global.
+        const indSem = ind.semaphore || { blue: '', green: '', yellow: '', red: '' };
+        const hasSpecificValues = indSem.blue || indSem.green || indSem.yellow || indSem.red;
+        
+        if (hasSpecificValues) {
+           setSem(indSem);
+        } else if (data.globalSettings?.semaphore) {
+           setSem(data.globalSettings.semaphore);
+        } else {
+           setSem({ blue: '', green: '', yellow: '', red: '' });
+        }
+
       }
     } else {
       setFormData({});
+      setSem({ blue: '', green: '', yellow: '', red: '' });
     }
-  }, [selectedIndicatorId, data.indicators]);
+  }, [selectedIndicatorId, data.indicators, data.globalSettings]);
 
   const handleSave = (status: 'draft' | 'final') => {
     if (!selectedIndicatorId) return;
@@ -47,6 +67,7 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
         return {
           ...ind,
           ...formData,
+          semaphore: sem, // Include semaphore in save
           status,
           updatedAt: new Date().toISOString()
         } as Indicator;
@@ -55,7 +76,15 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
     });
 
     onUpdate({ ...data, indicators: updatedIndicators });
-    setSelectedIndicatorId(null);
+    // Se estiver apenas salvando rascunho, não precisa limpar a seleção. 
+    // Se for finalizar, talvez queira manter na tela para ver o status mudar.
+    // setSelectedIndicatorId(null); // Comentado para melhorar UX
+  };
+
+  const handleUnlock = () => {
+    if(!confirm("Deseja desbloquear este indicador para edição?")) return;
+    // Salva imediatamente como Rascunho para liberar os campos
+    handleSave('draft');
   };
 
   const handleDeleteDetails = () => {
@@ -66,8 +95,11 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
       unit: 'num', 
       source: '', 
       periodicity: 'mensal', 
-      polarity: 'maior_melhor' 
+      polarity: 'maior_melhor',
+      calcType: 'isolated'
     });
+    // Reseta para o padrão global ao limpar
+    setSem(data.globalSettings?.semaphore || { blue: '', green: '', yellow: '', red: '' });
   };
 
   const handleInputChange = (field: keyof Indicator, value: string) => {
@@ -128,7 +160,37 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
                 </div>
               </div>
               
-              {isLocked && <div className="p-3 bg-green-50 text-green-800 rounded text-sm border border-green-200">🔒 Indicador Finalizado. Contate o admin para editar.</div>}
+              {isLocked && (
+                <div className="p-3 bg-green-50 text-green-800 rounded text-sm border border-green-200 flex justify-between items-center">
+                   <span className="flex items-center gap-2"><i className="ph ph-lock-key text-lg"></i> Indicador Finalizado. Contate o admin para editar.</span>
+                   <Button size="sm" variant="secondary" onClick={handleUnlock} className="bg-white border hover:bg-slate-50 text-slate-700">
+                      <i className="ph ph-lock-open"></i> Liberar Edição
+                   </Button>
+                </div>
+              )}
+
+              {/* SEMÁFORO - INSERIDO NO TOPO */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <label className="block text-sm font-bold text-slate-700 mb-3 border-b pb-1">Farol de Desempenho (Semáforo)</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div>
+                      <span className="block text-xs text-blue-600 font-bold mb-1">Azul (Superação)</span>
+                      <input disabled={isLocked} className="w-full border p-2 rounded text-sm" placeholder="Ex: > 110%" value={sem.blue} onChange={e => setSem({...sem, blue: e.target.value})} />
+                   </div>
+                   <div>
+                      <span className="block text-xs text-green-600 font-bold mb-1">Verde (Meta)</span>
+                      <input disabled={isLocked} className="w-full border p-2 rounded text-sm" placeholder="Ex: 100%" value={sem.green} onChange={e => setSem({...sem, green: e.target.value})} />
+                   </div>
+                   <div>
+                      <span className="block text-xs text-yellow-600 font-bold mb-1">Amarelo (Atenção)</span>
+                      <input disabled={isLocked} className="w-full border p-2 rounded text-sm" placeholder="Ex: 90-99%" value={sem.yellow} onChange={e => setSem({...sem, yellow: e.target.value})} />
+                   </div>
+                   <div>
+                      <span className="block text-xs text-red-600 font-bold mb-1">Vermelho (Crítico)</span>
+                      <input disabled={isLocked} className="w-full border p-2 rounded text-sm" placeholder="Ex: < 90%" value={sem.red} onChange={e => setSem({...sem, red: e.target.value})} />
+                   </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* UNIDADE (Select) */}
@@ -175,6 +237,25 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
               <div><label className="text-xs font-bold text-slate-500">Fórmula de Cálculo</label><textarea disabled={isLocked} className="w-full p-2 border rounded h-16" value={formData.formula || ''} onChange={e => handleInputChange('formula', e.target.value)} /></div>
               <div><label className="text-xs font-bold text-slate-500">Fonte de Dados</label><input disabled={isLocked} className="w-full p-2 border rounded" value={formData.source || ''} onChange={e => handleInputChange('source', e.target.value)} /></div>
               
+              {/* TIPO DE CÁLCULO - INSERIDO NA BASE */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <label className="block text-sm font-bold text-slate-700 mb-2">Configuração do Indicador</label>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'isolated'} onChange={() => handleInputChange('calcType', 'isolated')} />
+                    Isolado (Valor do Mês)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'accumulated'} onChange={() => handleInputChange('calcType', 'accumulated')} />
+                    Acumulado (Soma até a data)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'average'} onChange={() => handleInputChange('calcType', 'average')} />
+                    Média (Média do acumulado)
+                  </label>
+                </div>
+              </div>
+
               {!isLocked && (
                   <div className="pt-4 flex gap-2 border-t mt-4">
                       <Button variant="secondary" onClick={() => handleSave('draft')}>Salvar Rascunho</Button>

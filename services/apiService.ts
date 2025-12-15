@@ -121,6 +121,7 @@ export const apiService = {
         indicators: incoming.indicators || INITIAL_DATA.indicators,
         goals: incoming.goals || INITIAL_DATA.goals,
         users: incoming.users || INITIAL_DATA.users,
+        globalSettings: incoming.globalSettings || INITIAL_DATA.globalSettings,
       };
     } catch (e: any) {
       console.warn("Falha ao carregar dados:", e);
@@ -184,12 +185,12 @@ export const apiService = {
     }
   },
 
-  saveAdminSettings: async (settings: { adminPassword: string }, user: User) => {
+  saveAdminSettings: async (settings: any, user: User) => {
     notifyFn("Atualizando configurações...", "loading");
     try {
       // Usa uma ação específica ou reaproveita save_users se o backend não suportar save_settings
       await request('save_admin_settings', settings, user);
-      notifyFn("Senha de administrador atualizada!", "success");
+      notifyFn("Configurações atualizadas!", "success");
     } catch (e: any) {
       notifyFn(`Erro: ${e.message}`, "error");
     }

@@ -44,7 +44,9 @@ export interface Goal {
   indicatorId: string;
   year: number;
   history: { year: number; value: string }[];
-  monthlyValues: string[];
+  monthlyValues: string[];     // Metas Planejadas
+  monthlyRealized?: string[];  // Valores Realizados
+  locked?: boolean;            // Controle de Edição
 }
 
 export interface User {
@@ -73,6 +75,15 @@ export interface VisionMilestone {
   year: number;
   description: string;
 }
+
+export interface GlobalSettings {
+  semaphore: {
+    blue: string;
+    green: string;
+    yellow: string;
+    red: string;
+  };
+}
 // -----------------------
 
 export interface AppData {
@@ -85,6 +96,7 @@ export interface AppData {
   indicators: Indicator[];
   goals: Goal[];
   users: User[];
+  globalSettings?: GlobalSettings; // Configurações Globais
 }
 
 export const INITIAL_DATA: AppData = {
@@ -106,7 +118,15 @@ export const INITIAL_DATA: AppData = {
   objectives: [],
   indicators: [],
   goals: [],
-  users: []
+  users: [],
+  globalSettings: {
+    semaphore: {
+      blue: 'Acima de 110%',
+      green: 'De 100% a 110%',
+      yellow: 'De 90% a 99%',
+      red: 'Abaixo de 90%'
+    }
+  }
 };
 
 // Declaração global para bibliotecas carregadas via CDN
