@@ -105,42 +105,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // --- PASSWORD CHANGE LOGIC ---
   const handleChangePassword = () => {
-  if (!passData.current || !passData.new || !passData.confirm) {
-    alert("Preencha todos os campos.");
-    return;
-  }
+    if (!passData.current || !passData.new || !passData.confirm) {
+        alert("Preencha todos os campos.");
+        return;
+    }
+    
+    // TRATAMENTO ROBUSTO DE SENHA
+    // Normaliza a senha salva para String, pois planilhas podem retornar números (ex: 123456)
+    const storedPass = data.adminPassword ? String(data.adminPassword).trim() : '';
+    const validPass = storedPass || '123456';
+    
+    if (passData.current !== validPass) {
+        alert("A senha atual está incorreta.");
+        return;
+    }
 
-  const validPass = data.adminPassword;
+    if (passData.new !== passData.confirm) {
+        alert("A nova senha e a confirmação não coincidem.");
+        return;
+    }
 
-  if (!validPass) {
-    alert("Senha de administrador não configurada no sistema.");
-    return;
-  }
+    if (passData.new.length < 4) {
+        alert("A senha deve ter pelo menos 4 caracteres.");
+        return;
+    }
 
-  if (passData.current !== validPass) {
-    alert("A senha atual está incorreta.");
-    return;
-  }
-
-  if (passData.new !== passData.confirm) {
-    alert("A nova senha e a confirmação não coincidem.");
-    return;
-  }
-
-  if (passData.new.length < 4) {
-    alert("A senha deve ter pelo menos 4 caracteres.");
-    return;
-  }
-
-  if (confirm("Deseja realmente alterar a senha de administrador?")) {
-    onUpdate(
-      { ...data, adminPassword: passData.new },
-      'settings'
-    );
-    setPassData({ current: '', new: '', confirm: '' });
-  }
-};
-
+    if (confirm("Deseja realmente alterar a senha de administrador?")) {
+        onUpdate({ ...data, adminPassword: passData.new }, 'settings');
+        setPassData({ current: '', new: '', confirm: '' });
+    }
+  };
 
   // --- GLOBAL CONFIG SAVE ---
   const handleSaveGlobalConfig = () => {

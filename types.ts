@@ -100,7 +100,7 @@ export interface AppData {
 }
 
 export const INITIAL_DATA: AppData = {
-  adminPassword: '', // Senha provisória padrão
+  adminPassword: '123456', // Senha provisória padrão definida explicitamente
   identity: {
     companyName: '',
     logoUrl: '',

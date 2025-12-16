@@ -111,8 +111,18 @@ export const apiService = {
       
       const incoming = res.data || res;
       
+      // TRATAMENTO DE SENHA ROBUSTO:
+      // Google Sheets pode retornar número (123456) ao invés de string.
+      // Células vazias podem vir como null, undefined ou "".
+      let rawPass = incoming.adminPassword;
+      let finalPass = INITIAL_DATA.adminPassword; // Default '123456'
+
+      if (rawPass !== undefined && rawPass !== null && String(rawPass).trim() !== '') {
+          finalPass = String(rawPass).trim();
+      }
+
       return {
-        adminPassword: incoming.adminPassword || INITIAL_DATA.adminPassword,
+        adminPassword: finalPass,
         identity: incoming.identity || INITIAL_DATA.identity,
         visionLine: incoming.visionLine || INITIAL_DATA.visionLine,
         perspectives: incoming.perspectives || INITIAL_DATA.perspectives,

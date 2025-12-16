@@ -95,8 +95,13 @@ export default function App() {
 
   const attemptAdminUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    // Verifica se a senha bate com a salva (ou o padrão 123456)
-    const validPass = appData.adminPassword || '123456';
+    
+    // TRATAMENTO ROBUSTO DE SENHA
+    // Normaliza para string e remove espaços, garantindo que "123456" (número) vire "123456" (string)
+    const storedPass = appData.adminPassword ? String(appData.adminPassword).trim() : '';
+    // Se a senha estiver vazia, assume a padrão '123456'
+    const validPass = storedPass || '123456';
+    
     if (adminPassInput === validPass) {
         setAdminUnlocked(true);
         setAdminPassInput('');
