@@ -12,7 +12,7 @@ const PERIODICITY_OPTIONS = ['mensal', 'bimestral', 'trimestral', 'quadrimestral
 const POLARITY_OPTIONS = [
   { value: 'maior_melhor', label: 'Quanto Maior, Melhor' },
   { value: 'menor_melhor', label: 'Quanto Menor, Melhor' },
-  { value: 'estavel', label: 'Estável' },
+  { value: 'estavel', label: 'Estável (Faixa de Ouro)' },
 ];
 
 export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) => {
@@ -37,7 +37,8 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
           source: ind.source,
           periodicity: ind.periodicity || 'mensal',
           polarity: ind.polarity || 'maior_melhor',
-          calcType: ind.calcType || 'isolated'
+          calcType: ind.calcType || 'isolated',
+          rollingWindow: ind.rollingWindow || 3
         });
         
         // Verifica se o indicador tem semáforo preenchido. Se não tiver nenhum valor, usa o global.
@@ -76,14 +77,10 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
     });
 
     onUpdate({ ...data, indicators: updatedIndicators });
-    // Se estiver apenas salvando rascunho, não precisa limpar a seleção. 
-    // Se for finalizar, talvez queira manter na tela para ver o status mudar.
-    // setSelectedIndicatorId(null); // Comentado para melhorar UX
   };
 
   const handleUnlock = () => {
     if(!confirm("Deseja desbloquear este indicador para edição?")) return;
-    // Salva imediatamente como Rascunho para liberar os campos
     handleSave('draft');
   };
 
@@ -96,13 +93,13 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
       source: '', 
       periodicity: 'mensal', 
       polarity: 'maior_melhor',
-      calcType: 'isolated'
+      calcType: 'isolated',
+      rollingWindow: 3
     });
-    // Reseta para o padrão global ao limpar
     setSem(data.globalSettings?.semaphore || { blue: '', green: '', yellow: '', red: '' });
   };
 
-  const handleInputChange = (field: keyof Indicator, value: string) => {
+  const handleInputChange = (field: keyof Indicator, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -152,7 +149,7 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
 
         <div className="lg:col-span-2">
           {selectedIndicatorId && activeIndicator ? (
-            <div className="bg-white p-6 rounded shadow border space-y-4">
+            <div className="bg-white p-6 rounded shadow border space-y-4 animate-fade-in">
               <div className="border-b pb-4">
                 <h3 className="text-xl font-bold text-slate-800">{activeIndicator.name}</h3>
                 <div className="flex gap-4 text-xs mt-2 text-slate-500">
@@ -169,9 +166,52 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
                 </div>
               )}
 
-              {/* SEMÁFORO - INSERIDO NO TOPO */}
+              {/* TIPO DE CÁLCULO - ATUALIZADO */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <label className="block text-sm font-bold text-slate-700 mb-3 border-b pb-1">Farol de Desempenho (Semáforo)</label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">3. Regra de Cálculo</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-slate-200">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'isolated'} onChange={() => handleInputChange('calcType', 'isolated')} />
+                    Isolado (Valor do Mês)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-slate-200">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'accumulated'} onChange={() => handleInputChange('calcType', 'accumulated')} />
+                    Acumulado (Soma Anual)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-slate-200">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'ytd'} onChange={() => handleInputChange('calcType', 'ytd')} />
+                    YTD (Year-To-Date)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-slate-200">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'average'} onChange={() => handleInputChange('calcType', 'average')} />
+                    Média (Do acumulado)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer p-2 hover:bg-white rounded border border-transparent hover:border-slate-200">
+                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'rolling'} onChange={() => handleInputChange('calcType', 'rolling')} />
+                    Rolling (Janela Móvel)
+                  </label>
+                </div>
+                
+                {formData.calcType === 'rolling' && (
+                    <div className="mt-3 pl-6 border-l-2 border-blue-300">
+                        <label className="text-xs font-bold text-blue-800">Janela de Meses (Rolling):</label>
+                        <select 
+                            disabled={isLocked}
+                            className="ml-2 border rounded p-1 text-sm bg-white"
+                            value={formData.rollingWindow || 3}
+                            onChange={e => handleInputChange('rollingWindow', parseInt(e.target.value))}
+                        >
+                            <option value={3}>3 Meses</option>
+                            <option value={6}>6 Meses</option>
+                            <option value={12}>12 Meses</option>
+                        </select>
+                    </div>
+                )}
+              </div>
+
+              {/* SEMÁFORO */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <label className="block text-sm font-bold text-slate-700 mb-3 border-b pb-1">5. Farol de Desempenho (Semáforo)</label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div>
                       <span className="block text-xs text-blue-600 font-bold mb-1">Azul (Superação)</span>
@@ -221,7 +261,7 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
 
                   {/* POLARIDADE (Select) */}
                   <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">Polaridade</label>
+                    <label className="text-xs font-bold text-slate-500 block mb-1">Polaridade (Regra do Farol)</label>
                     <select 
                       disabled={isLocked} 
                       className="w-full p-2 border rounded bg-white" 
@@ -236,25 +276,6 @@ export const ManagerPanel: React.FC<ManagerPanelProps> = ({ data, onUpdate }) =>
               <div><label className="text-xs font-bold text-slate-500">Descrição</label><textarea disabled={isLocked} className="w-full p-2 border rounded h-20" value={formData.description || ''} onChange={e => handleInputChange('description', e.target.value)} /></div>
               <div><label className="text-xs font-bold text-slate-500">Fórmula de Cálculo</label><textarea disabled={isLocked} className="w-full p-2 border rounded h-16" value={formData.formula || ''} onChange={e => handleInputChange('formula', e.target.value)} /></div>
               <div><label className="text-xs font-bold text-slate-500">Fonte de Dados</label><input disabled={isLocked} className="w-full p-2 border rounded" value={formData.source || ''} onChange={e => handleInputChange('source', e.target.value)} /></div>
-              
-              {/* TIPO DE CÁLCULO - INSERIDO NA BASE */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Configuração do Indicador</label>
-                <div className="flex flex-col md:flex-row gap-4">
-                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'isolated'} onChange={() => handleInputChange('calcType', 'isolated')} />
-                    Isolado (Valor do Mês)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'accumulated'} onChange={() => handleInputChange('calcType', 'accumulated')} />
-                    Acumulado (Soma até a data)
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                    <input disabled={isLocked} type="radio" name="calcTypeMgr" checked={formData.calcType === 'average'} onChange={() => handleInputChange('calcType', 'average')} />
-                    Média (Média do acumulado)
-                  </label>
-                </div>
-              </div>
 
               {!isLocked && (
                   <div className="pt-4 flex gap-2 border-t mt-4">

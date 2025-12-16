@@ -30,7 +30,9 @@ export interface Indicator {
   polarity: string;
   status: 'draft' | 'final';
   updatedAt: string;
-  calcType?: 'isolated' | 'accumulated' | 'average';
+  // Novos tipos de cálculo adicionados
+  calcType?: 'isolated' | 'accumulated' | 'average' | 'rolling' | 'ytd';
+  rollingWindow?: number; // Para cálculo Rolling (ex: 3, 6, 12 meses)
   semaphore?: {
     blue: string;
     green: string;
@@ -133,5 +135,7 @@ export const INITIAL_DATA: AppData = {
 declare global {
   interface Window {
     XLSX: any;
+    html2canvas: any;
+    jspdf: any;
   }
 }
