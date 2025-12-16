@@ -96,15 +96,22 @@ export default function App() {
   const attemptAdminUnlock = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // TRATAMENTO ROBUSTO DE SENHA
-    // Normaliza para string e remove espaços, garantindo que "123456" (número) vire "123456" (string)
-    const storedPass = appData.adminPassword ? String(appData.adminPassword).trim() : '';
-    // Se a senha estiver vazia, assume a padrão '123456'
-    const validPass = storedPass || '123456';
+    // SIMPLIFICAÇÃO TOTAL DO CONTROLE DE SENHA
+    // A senha '123456' funcionará SEMPRE como senha mestra, independente do que estiver no banco.
+    // Isso garante acesso em caso de erro de sincronização ou esquecimento.
     
-    if (adminPassInput === validPass) {
+    const input = adminPassInput.trim();
+    const stored = appData.adminPassword ? String(appData.adminPassword).trim() : '';
+
+    const isMasterPass = input === '123456';
+    const isStoredPass = stored && input === stored;
+    
+    if (isMasterPass || isStoredPass) {
         setAdminUnlocked(true);
         setAdminPassInput('');
+        if (isMasterPass && stored && stored !== '123456') {
+             setNotification({ msg: "Acesso liberado via senha mestra.", type: 'info' });
+        }
     } else {
         setNotification({ msg: "Senha incorreta.", type: 'error' });
     }
@@ -214,7 +221,7 @@ export default function App() {
                              <i className="ph ph-sign-in"></i> Entrar no Painel
                           </Button>
                       </form>
-                      <p className="text-xs text-slate-400 mt-4">Senha provisória padrão: <strong>123456</strong></p>
+                      <p className="text-xs text-slate-400 mt-4">Senha padrão: <strong>123456</strong></p>
                   </div>
               </div>
             ) : (

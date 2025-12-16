@@ -33,8 +33,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // --- CRUD States for Structure ---
   const [newPerspName, setNewPerspName] = useState('');
   const [newManagerName, setNewManagerName] = useState('');
+  
   const [newObjName, setNewObjName] = useState('');
   const [selectedPerspForObj, setSelectedPerspForObj] = useState('');
+
+  // States for Manual Indicator Creation
+  const [newIndName, setNewIndName] = useState('');
+  const [indPerspFilter, setIndPerspFilter] = useState('');
+  const [indObjFilter, setIndObjFilter] = useState('');
+  const [indManager, setIndManager] = useState('');
 
   // --- Security State ---
   const [passData, setPassData] = useState({ current: '', new: '', confirm: '' });
@@ -103,6 +110,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewObjName('');
   };
 
+  const addIndicator = () => {
+    if (!newIndName.trim() || !indObjFilter) {
+       alert("Selecione um Objetivo e digite o nome do Indicador.");
+       return;
+    }
+
+    const obj = data.objectives.find(o => o.id === indObjFilter);
+    if (!obj) return;
+
+    const newInd: Indicator = {
+        id: generateId('IND'),
+        name: newIndName.trim(),
+        objetivoId: obj.id,
+        perspectivaId: obj.perspectiveId, // Garante o vínculo correto para filtros
+        gestorId: indManager,
+        description: '',
+        formula: '',
+        unit: 'num',
+        source: '',
+        periodicity: 'mensal',
+        polarity: 'maior_melhor',
+        status: 'draft',
+        updatedAt: new Date().toISOString()
+    };
+
+    onUpdate({ ...data, indicators: [...data.indicators, newInd] }, 'structure');
+    setNewIndName('');
+  };
+
   // --- PASSWORD CHANGE LOGIC ---
   const handleChangePassword = () => {
     if (!passData.current || !passData.new || !passData.confirm) {
@@ -111,11 +147,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     
     // TRATAMENTO ROBUSTO DE SENHA
-    // Normaliza a senha salva para String, pois planilhas podem retornar números (ex: 123456)
+    const currentInput = passData.current.trim();
     const storedPass = data.adminPassword ? String(data.adminPassword).trim() : '';
-    const validPass = storedPass || '123456';
     
-    if (passData.current !== validPass) {
+    // Aceita se for a senha salva OU a senha mestra '123456'
+    const isValid = currentInput === '123456' || (storedPass && currentInput === storedPass);
+    
+    if (!isValid) {
         alert("A senha atual está incorreta.");
         return;
     }
@@ -133,6 +171,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (confirm("Deseja realmente alterar a senha de administrador?")) {
         onUpdate({ ...data, adminPassword: passData.new }, 'settings');
         setPassData({ current: '', new: '', confirm: '' });
+        alert("Senha alterada com sucesso!");
     }
   };
 
@@ -416,7 +455,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Rest of the component (import and structure tabs) remains unchanged, just re-rendering to include navigation updates */}
+      {/* Import Tab */}
       {activeSubTab === 'import' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200">
           {!showPreview ? (
@@ -490,9 +529,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeSubTab === 'structure' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 space-y-8">
+            
+            {/* ROW 1: Perspectives & Managers */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="border rounded-lg p-4 bg-slate-50">
-                    <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-squares-four"></i> Perspectivas</h3>
+                    <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-squares-four"></i> 1. Perspectivas</h3>
                     <div className="flex gap-2 mb-3">
                         <input className="flex-1 border p-2 rounded text-sm" placeholder="Nova Perspectiva" value={newPerspName} onChange={e => setNewPerspName(e.target.value)} />
                         <Button size="sm" type="button" onClick={addPerspective}><i className="ph ph-plus"></i></Button>
@@ -510,7 +551,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </ul>
                 </div>
                 <div className="border rounded-lg p-4 bg-slate-50">
-                    <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-users"></i> Gestores</h3>
+                    <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-users"></i> 2. Gestores</h3>
                     <div className="flex gap-2 mb-3">
                         <input className="flex-1 border p-2 rounded text-sm" placeholder="Novo Gestor" value={newManagerName} onChange={e => setNewManagerName(e.target.value)} />
                         <Button size="sm" type="button" onClick={addManager}><i className="ph ph-plus"></i></Button>
@@ -528,8 +569,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </ul>
                 </div>
             </div>
+
+            {/* ROW 2: Objectives */}
             <div className="border rounded-lg p-4 bg-slate-50">
-                <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-target"></i> Objetivos</h3>
+                <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-target"></i> 3. Objetivos Estratégicos</h3>
                 <div className="flex flex-col md:flex-row gap-2 mb-3 bg-white p-3 rounded border shadow-sm">
                     <select className="border p-2 rounded text-sm md:w-1/3" value={selectedPerspForObj} onChange={e => setSelectedPerspForObj(e.target.value)}>
                         <option value="">Selecione a Perspectiva...</option>
@@ -550,6 +593,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ))}
                 </div>
             </div>
+
+            {/* ROW 3: Indicators (NEW) */}
+            <div className="border rounded-lg p-4 bg-slate-50 border-blue-200">
+                <h3 className="font-bold text-lg mb-3 text-blue-900 flex items-center gap-2"><i className="ph ph-chart-line-up"></i> 4. Indicadores de Desempenho</h3>
+                <div className="bg-white p-3 rounded border shadow-sm space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <select className="border p-2 rounded text-sm" value={indPerspFilter} onChange={e => { setIndPerspFilter(e.target.value); setIndObjFilter(''); }}>
+                            <option value="">1. Filtre a Perspectiva...</option>
+                            {data.perspectives.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <select className="border p-2 rounded text-sm" value={indObjFilter} onChange={e => setIndObjFilter(e.target.value)} disabled={!indPerspFilter}>
+                            <option value="">2. Selecione o Objetivo...</option>
+                            {data.objectives.filter(o => o.perspectiveId === indPerspFilter).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                        </select>
+                        <select className="border p-2 rounded text-sm" value={indManager} onChange={e => setIndManager(e.target.value)}>
+                            <option value="">3. Defina o Gestor (Opcional)</option>
+                            {data.managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex gap-2">
+                       <input className="flex-1 border p-2 rounded text-sm" placeholder="Nome do Indicador" value={newIndName} onChange={e => setNewIndName(e.target.value)} />
+                       <Button size="sm" type="button" onClick={addIndicator} disabled={!indObjFilter || !newIndName.trim()}>Adicionar Indicador</Button>
+                    </div>
+                </div>
+                {/* List of latest added indicators could go here, but global table handles it */}
+            </div>
+
         </div>
       )}
 
@@ -571,7 +641,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </tr>
               </thead>
               <tbody className="divide-y">
-                  {data.indicators.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum dado.</td></tr>}
+                  {data.indicators.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum dado. Cadastre indicadores acima ou importe uma planilha.</td></tr>}
                   {data.indicators.map(ind => (
                       <tr key={ind.id} className="hover:bg-blue-50 group">
                           <td className="p-3 text-xs text-slate-500 align-top">{data.perspectives.find(p => p.id === ind.perspectivaId)?.name}</td>
