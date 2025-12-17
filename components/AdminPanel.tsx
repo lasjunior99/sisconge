@@ -3,7 +3,7 @@ import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
 import { PasswordInput } from './ui/PasswordInput';
-import { analisarComIA } from '../services/iaService';
+import { GoogleGenAI } from "@google/genai";
 
 interface AdminPanelProps {
   data: AppData;
@@ -12,7 +12,7 @@ interface AdminPanelProps {
   onClose?: () => void;
 }
 
-type TabMode = 'structure' | 'import' | 'security' | 'config' | 'ia';
+type TabMode = 'structure' | 'import' | 'security' | 'config' | 'ai-analysis';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   data, 
@@ -50,9 +50,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // --- Global Config State ---
   const [globalSem, setGlobalSem] = useState({ blue: '', green: '', yellow: '', red: '' });
 
-  // --- IA State ---
-const [iaResponse, setIaResponse] = useState<string>('');
-const [iaLoading, setIaLoading] = useState(false);
+  // --- AI Analysis State ---
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     if (data.globalSettings && data.globalSettings.semaphore) {
@@ -190,33 +191,6 @@ const [iaLoading, setIaLoading] = useState(false);
       }
     }, 'settings');
   };
-
-  const executarAnaliseIA = async () => {
-  try {
-    // Segurança funcional extra (opcional, mas recomendado)
-    if (user.perfil !== 'ADMIN') {
-      alert('Acesso restrito ao administrador');
-      return;
-    }
-
-    setIaLoading(true);
-    setIaResponse('');
-
-    const prompt = `
-      Analise a estrutura estratégica cadastrada no sistema.
-      Considere perspectivas, objetivos, indicadores e gestores.
-      Aponte riscos, incoerências e sugestões de melhoria.
-    `;
-
-    const resposta = await analisarComIA(prompt);
-    setIaResponse(resposta);
-
-  } catch (err: any) {
-    alert('Erro ao executar análise com IA');
-  } finally {
-    setIaLoading(false);
-  }
-};
 
   // --- IMPORT LOGIC ---
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,6 +367,78 @@ const [iaLoading, setIaLoading] = useState(false);
     }
   };
 
+  // --- AI ANALYSIS LOGIC ---
+  const handleAnalyze = async () => {
+    if (!process.env.API_KEY) {
+      alert("Chave de API do Google Gemini não configurada. Verifique as variáveis de ambiente.");
+      return;
+    }
+
+    if (!aiPrompt.trim()) {
+        alert("Por favor, digite sua pergunta ou solicitação para a IA.");
+        return;
+    }
+
+    setAiLoading(true);
+    setAiResult('');
+
+    // Preparar o contexto do sistema em JSON simplificado para a IA
+    const systemContext = {
+      Identidade: {
+        Empresa: data.identity.companyName,
+        Missao: data.identity.mission,
+        Visao: data.identity.vision,
+        Valores: data.identity.values,
+        Proposito: data.identity.purpose
+      },
+      VisaoFuturo: data.visionLine.map(v => ({ Ano: v.year, Descricao: v.description })),
+      MapaEstrategico: data.perspectives.map(p => ({
+        Perspectiva: p.name,
+        Objetivos: data.objectives
+          .filter(o => o.perspectiveId === p.id)
+          .map(o => ({
+            Nome: o.name,
+            Responsavel: data.managers.find(m => m.id === o.gestorId)?.name,
+            Indicadores: data.indicators
+              .filter(i => i.objetivoId === o.id)
+              .map(i => ({
+                Nome: i.name,
+                MetaAnual: data.goals.find(g => g.indicatorId === i.id)?.monthlyValues.reduce((acc, curr) => acc + (parseFloat(curr)||0), 0)
+              }))
+          }))
+      }))
+    };
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Usando o modelo gemini-2.5-flash para tarefas de texto básicas/analíticas
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            parts: [
+              { text: "INSTRUÇÃO DO SISTEMA: Você é um consultor especialista em planejamento estratégico. Responda à solicitação do usuário com base EXCLUSIVAMENTE nos dados da empresa fornecidos abaixo." },
+              { text: "DADOS DA EMPRESA (JSON):" },
+              { text: JSON.stringify(systemContext, null, 2) },
+              { text: "SOLICITAÇÃO DO USUÁRIO:" },
+              { text: aiPrompt }
+            ]
+          }
+        ]
+      });
+
+      const text = response.text;
+      setAiResult(text || "Sem resposta da IA.");
+
+    } catch (error: any) {
+      console.error("Erro na análise IA:", error);
+      alert("Ocorreu um erro ao consultar a IA. Verifique o console ou sua chave de API.");
+      setAiResult("Erro na execução da análise.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-10">
       <div className="flex justify-between items-center border-b pb-4 bg-white p-4 rounded shadow-sm">
@@ -410,9 +456,62 @@ const [iaLoading, setIaLoading] = useState(false);
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'import' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('import')}>📥 Importação</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'config' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('config')}>⚙️ Configurações</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'security' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('security')}>🔒 Segurança</button>
-        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'ia' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('ia')}>🤖 Análise IA</button>
-
+        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'ai-analysis' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('ai-analysis')}>✨ Análise IA</button>
       </div>
+
+      {activeSubTab === 'ai-analysis' && (
+        <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
+           <div className="flex justify-between items-center mb-4">
+               <div>
+                   <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                     <i className="ph ph-magic-wand text-purple-600"></i> Consultoria Estratégica via IA
+                   </h3>
+                   <p className="text-sm text-slate-500">Utilize inteligência artificial para auditar e sugerir melhorias no seu Contrato de Gestão.</p>
+               </div>
+           </div>
+
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1 space-y-4">
+                  <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-2">Sua Solicitação (Prompt)</label>
+                      <textarea 
+                        className="w-full p-3 border rounded-lg text-sm h-64 focus:ring-2 focus:ring-purple-200 focus:border-purple-400 placeholder:text-slate-400"
+                        placeholder="Ex: Analise a coerência entre a Visão de Futuro e os Indicadores cadastrados..."
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                      />
+                  </div>
+                  <Button 
+                    onClick={handleAnalyze} 
+                    disabled={aiLoading} 
+                    className={`w-full flex items-center justify-center gap-2 py-3 ${aiLoading ? 'bg-slate-400' : 'bg-purple-700 hover:bg-purple-800'}`}
+                  >
+                    {aiLoading ? (
+                        <>
+                           <i className="ph ph-spinner animate-spin"></i> Analisando...
+                        </>
+                    ) : (
+                        <>
+                           <i className="ph ph-lightning"></i> Gerar Análise
+                        </>
+                    )}
+                  </Button>
+                  <div className="bg-purple-50 p-3 rounded text-xs text-purple-800 border border-purple-100">
+                     <strong>Nota:</strong> O sistema injetará automaticamente os dados de Identidade, Metas e Estrutura da empresa para contexto da IA.
+                  </div>
+              </div>
+
+              <div className="lg:col-span-2">
+                 <div className="border rounded-lg bg-slate-50 min-h-[400px] flex flex-col">
+                    <div className="p-3 border-b bg-white rounded-t-lg font-bold text-slate-700">Resultado da Análise</div>
+                    <div className="p-6 flex-1 whitespace-pre-wrap text-sm text-slate-800 font-medium leading-relaxed overflow-y-auto max-h-[600px]">
+                        {aiResult || <span className="text-slate-400 italic">O resultado aparecerá aqui...</span>}
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
 
       {activeSubTab === 'config' && (
         <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
@@ -488,27 +587,6 @@ const [iaLoading, setIaLoading] = useState(false);
            </div>
         </div>
       )}
-      {activeSubTab === 'ia' && (
-  <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
-    <h3 className="font-bold text-lg mb-4 text-blue-900">
-      Análise Estratégica com IA
-    </h3>
-
-    <p className="text-sm text-slate-600 mb-4">
-      A IA analisa automaticamente a estrutura estratégica cadastrada no sistema.
-    </p>
-
-    <Button onClick={executarAnaliseIA} disabled={iaLoading}>
-      {iaLoading ? 'Analisando...' : 'Executar Análise'}
-    </Button>
-
-    {iaResponse && (
-      <div className="mt-6 p-4 bg-slate-50 border rounded text-sm whitespace-pre-wrap">
-        {iaResponse}
-      </div>
-    )}
-  </div>
-)}
 
       {/* Import Tab */}
       {activeSubTab === 'import' && (
@@ -672,49 +750,9 @@ const [iaLoading, setIaLoading] = useState(false);
                        <Button size="sm" type="button" onClick={addIndicator} disabled={!indObjFilter || !newIndName.trim()}>Adicionar Indicador</Button>
                     </div>
                 </div>
-                {/* List of latest added indicators could go here, but global table handles it */}
             </div>
-
         </div>
       )}
-
-      {/* GLOBAL REPORT TABLE */}
-      <div className="bg-white rounded border overflow-hidden shadow-sm mt-8">
-        <div className="bg-slate-100 p-3 border-b flex justify-between items-center">
-          <h3 className="font-bold text-slate-700 flex items-center gap-2"><i className="ph ph-table"></i> Dados no Sistema</h3>
-          <span className="text-xs text-slate-500 font-bold">Total: {data.indicators.length}</span>
-        </div>
-        <div className="overflow-x-auto max-h-[500px]">
-          <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-slate-600 font-bold border-b sticky top-0">
-                  <tr>
-                      <th className="p-3">Perspectiva</th>
-                      <th className="p-3">Objetivo</th>
-                      <th className="p-3">Indicador</th>
-                      <th className="p-3">Gestor</th>
-                      <th className="p-3 text-right">Ações</th>
-                  </tr>
-              </thead>
-              <tbody className="divide-y">
-                  {data.indicators.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum dado. Cadastre indicadores acima ou importe uma planilha.</td></tr>}
-                  {data.indicators.map(ind => (
-                      <tr key={ind.id} className="hover:bg-blue-50 group">
-                          <td className="p-3 text-xs text-slate-500 align-top">{data.perspectives.find(p => p.id === ind.perspectivaId)?.name}</td>
-                          <td className="p-3 text-xs text-slate-600 align-top">{data.objectives.find(o => o.id === ind.objetivoId)?.name}</td>
-                          <td className="p-3 font-medium text-slate-800 align-top">{ind.name}</td>
-                          <td className="p-3 text-xs text-slate-500 align-top">{data.managers.find(m => m.id === ind.gestorId)?.name || '-'}</td>
-                          <td className="p-3 text-right align-top">
-                              <div className="flex justify-end gap-2">
-                                  <button onClick={() => handleEdit('ind', ind.id, ind.name)} className="text-blue-600 hover:bg-blue-100 p-1 rounded" title="Editar"><i className="ph ph-pencil text-lg"></i></button>
-                                  <button onClick={() => handleDelete('ind', ind.id)} className="text-red-600 hover:bg-red-100 p-1 rounded" title="Excluir"><i className="ph ph-trash text-lg"></i></button>
-                              </div>
-                          </td>
-                      </tr>
-                  ))}
-              </tbody>
-          </table>
-        </div>
-      </div>
 
     </div>
   );
