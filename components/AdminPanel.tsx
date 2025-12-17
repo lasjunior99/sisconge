@@ -3,6 +3,8 @@ import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
 import { PasswordInput } from './ui/PasswordInput';
+import { GoogleGenAI } from "@google/genai";
+import { MaturitySurvey } from './MaturitySurvey';
 
 interface AdminPanelProps {
   data: AppData;
@@ -11,7 +13,7 @@ interface AdminPanelProps {
   onClose?: () => void;
 }
 
-type TabMode = 'structure' | 'import' | 'security' | 'config' | 'ai-analysis';
+type TabMode = 'structure' | 'import' | 'security' | 'config' | 'ai-analysis' | 'maturity-survey';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   data, 
@@ -203,43 +205,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleAnalyze = async () => {
-  if (!aiPrompt.trim()) {
-    alert("Digite uma solicitação.");
-    return;
-  }
-
-  setAiLoading(true);
-  setAiResult('');
-
-  try {
-    const response = await fetch('/api/analise-ia', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: aiPrompt,
-        context: {
-          identidade: data.identity,
-          visao: data.visionLine,
-          mapa: data.perspectives.map(p => ({
-            perspectiva: p.name,
-            objetivos: data.objectives
-              .filter(o => o.perspectiveId === p.id)
-              .map(o => o.name)
-          }))
-        }
-      })
-    });
-
-    const result = await response.json();
-    setAiResult(result.text || 'Sem resposta da IA.');
-
-  } catch (err) {
-    alert("Erro ao executar análise com IA.");
-  } finally {
-    setAiLoading(false);
-  }
-};
-
+    if (!aiPrompt.trim()) return alert("Digite uma solicitação.");
+    setAiLoading(true); setAiResult('');
+    const systemContext = { Identidade: data.identity, Visao: data.visionLine, Mapa: data.perspectives.map(p => ({ p: p.name, objs: data.objectives.filter(o => o.perspectiveId === p.id).map(o => o.name) })) };
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ parts: [{ text: "Você é um consultor estratégico. Responda baseado nos dados:\n" + JSON.stringify(systemContext) + "\n\nUsuário: " + aiPrompt }] }]
+      });
+      setAiResult(response.text || "Sem resposta.");
+    } catch (error) {
+      alert("Erro na IA.");
+    } finally { setAiLoading(false); }
+  };
 
   return (
     <div className="space-y-6 pb-10">
@@ -248,12 +227,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {onClose && <Button variant="danger" size="sm" onClick={onClose}>Sair</Button>}
       </div>
       <div className="flex gap-2 border-b border-slate-200 pb-1 overflow-x-auto">
-        <button className={`px-4 py-2 text-sm font-bold ${activeSubTab === 'structure' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('structure')}>Manual</button>
-        <button className={`px-4 py-2 text-sm font-bold ${activeSubTab === 'import' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('import')}>Importação</button>
-        <button className={`px-4 py-2 text-sm font-bold ${activeSubTab === 'config' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('config')}>Configurações</button>
-        <button className={`px-4 py-2 text-sm font-bold ${activeSubTab === 'security' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('security')}>Segurança</button>
-        <button className={`px-4 py-2 text-sm font-bold ${activeSubTab === 'ai-analysis' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('ai-analysis')}>Análise IA</button>
+        <button className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeSubTab === 'structure' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('structure')}>Manual</button>
+        <button className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeSubTab === 'import' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('import')}>Importação</button>
+        <button className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeSubTab === 'config' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('config')}>Configurações</button>
+        <button className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeSubTab === 'security' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('security')}>Segurança</button>
+        <button className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeSubTab === 'ai-analysis' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('ai-analysis')}>Análise IA</button>
+        <button className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeSubTab === 'maturity-survey' ? 'text-blue-700 border-b-2 border-blue-700' : 'text-slate-500'}`} onClick={() => setActiveSubTab('maturity-survey')}>✨ Pesquisa Maturidade</button>
       </div>
+
+      {activeSubTab === 'maturity-survey' && (
+        <MaturitySurvey data={data} />
+      )}
 
       {activeSubTab === 'ai-analysis' && (
         <div className="bg-white p-6 rounded shadow border animate-fade-in">
