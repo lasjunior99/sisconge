@@ -156,7 +156,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const findIndex = (row: any[], keys: string[]) => row.findIndex(c => c && keys.includes(normalizeKey(c)));
 
     for (let i = 0; i < Math.min(rows.length, 25); i++) {
-      const normRow = (rows[i] || []).map(any => normalizeKey(c));
+      const normRow = (rows[i] || []).map((c: any) => normalizeKey(c));
       const idxInd = findIndex(normRow, synonyms.ind);
       if (idxInd !== -1) {
         headerRowIndex = i;
@@ -203,21 +203,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleAnalyze = async () => {
-    
-    if (!aiPrompt.trim()) return alert("Digite uma solicitação.");
-    setAiLoading(true); setAiResult('');
-    const systemContext = { Identidade: data.identity, Visao: data.visionLine, Mapa: data.perspectives.map(p => ({ p: p.name, objs: data.objectives.filter(o => o.perspectiveId === p.id).map(o => o.name) })) };
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ parts: [{ text: "Você é um consultor estratégico. Responda baseado nos dados:\n" + JSON.stringify(systemContext) + "\n\nUsuário: " + aiPrompt }] }]
-      });
-      setAiResult(response.text || "Sem resposta.");
-    } catch (error) {
-      alert("Erro na IA.");
-    } finally { setAiLoading(false); }
-  };
+  if (!aiPrompt.trim()) {
+    alert("Digite uma solicitação.");
+    return;
+  }
+
+  setAiLoading(true);
+  setAiResult('');
+
+  try {
+    const response = await fetch('/api/analise-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: aiPrompt,
+        context: {
+          identidade: data.identity,
+          visao: data.visionLine,
+          mapa: data.perspectives.map(p => ({
+            perspectiva: p.name,
+            objetivos: data.objectives
+              .filter(o => o.perspectiveId === p.id)
+              .map(o => o.name)
+          }))
+        }
+      })
+    });
+
+    const result = await response.json();
+    setAiResult(result.text || 'Sem resposta da IA.');
+
+  } catch (err) {
+    alert("Erro ao executar análise com IA.");
+  } finally {
+    setAiLoading(false);
+  }
+};
+
 
   return (
     <div className="space-y-6 pb-10">
