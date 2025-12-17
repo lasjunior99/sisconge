@@ -34,6 +34,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
       real: 0,
       pct: 0,
       color: 'bg-slate-100 text-slate-400', // Cinza (Sem dados)
+      icon: 'minus', // Adicionado para evitar erro TS2339
       displayMeta: '-',
       displayReal: '-',
       displayPct: '-',
