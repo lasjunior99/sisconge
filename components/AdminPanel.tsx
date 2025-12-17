@@ -3,6 +3,7 @@ import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
 import { PasswordInput } from './ui/PasswordInput';
+import { analisarComIA } from '../services/iaService';
 
 interface AdminPanelProps {
   data: AppData;
@@ -11,7 +12,7 @@ interface AdminPanelProps {
   onClose?: () => void;
 }
 
-type TabMode = 'structure' | 'import' | 'security' | 'config';
+type TabMode = 'structure' | 'import' | 'security' | 'config' | 'ia';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   data, 
@@ -48,6 +49,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // --- Global Config State ---
   const [globalSem, setGlobalSem] = useState({ blue: '', green: '', yellow: '', red: '' });
+
+  // --- IA State ---
+const [iaResponse, setIaResponse] = useState<string>('');
+const [iaLoading, setIaLoading] = useState(false);
 
   useEffect(() => {
     if (data.globalSettings && data.globalSettings.semaphore) {
@@ -185,6 +190,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
     }, 'settings');
   };
+
+  const executarAnaliseIA = async () => {
+  try {
+    // Segurança funcional extra (opcional, mas recomendado)
+    if (user.perfil !== 'ADMIN') {
+      alert('Acesso restrito ao administrador');
+      return;
+    }
+
+    setIaLoading(true);
+    setIaResponse('');
+
+    const prompt = `
+      Analise a estrutura estratégica cadastrada no sistema.
+      Considere perspectivas, objetivos, indicadores e gestores.
+      Aponte riscos, incoerências e sugestões de melhoria.
+    `;
+
+    const resposta = await analisarComIA(prompt);
+    setIaResponse(resposta);
+
+  } catch (err: any) {
+    alert('Erro ao executar análise com IA');
+  } finally {
+    setIaLoading(false);
+  }
+};
 
   // --- IMPORT LOGIC ---
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -378,6 +410,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'import' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('import')}>📥 Importação</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'config' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('config')}>⚙️ Configurações</button>
         <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'security' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('security')}>🔒 Segurança</button>
+        <button className={`px-4 py-2 text-sm font-bold rounded-t-lg border-t border-x ${activeSubTab === 'ia' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'}`} onClick={() => setActiveSubTab('ia')}>🤖 Análise IA</button>
+
       </div>
 
       {activeSubTab === 'config' && (
@@ -454,6 +488,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
            </div>
         </div>
       )}
+      {activeSubTab === 'ia' && (
+  <div className="bg-white p-6 rounded-b-lg shadow-sm border border-t-0 border-slate-200 animate-fade-in">
+    <h3 className="font-bold text-lg mb-4 text-blue-900">
+      Análise Estratégica com IA
+    </h3>
+
+    <p className="text-sm text-slate-600 mb-4">
+      A IA analisa automaticamente a estrutura estratégica cadastrada no sistema.
+    </p>
+
+    <Button onClick={executarAnaliseIA} disabled={iaLoading}>
+      {iaLoading ? 'Analisando...' : 'Executar Análise'}
+    </Button>
+
+    {iaResponse && (
+      <div className="mt-6 p-4 bg-slate-50 border rounded text-sm whitespace-pre-wrap">
+        {iaResponse}
+      </div>
+    )}
+  </div>
+)}
 
       {/* Import Tab */}
       {activeSubTab === 'import' && (
