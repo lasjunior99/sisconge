@@ -3,7 +3,6 @@ import { AppData, User, Indicator, Objective, Perspective, Manager, INITIAL_DATA
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
 import { PasswordInput } from './ui/PasswordInput';
-import { GoogleGenAI } from "@google/genai";
 
 interface AdminPanelProps {
   data: AppData;
@@ -157,7 +156,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const findIndex = (row: any[], keys: string[]) => row.findIndex(c => c && keys.includes(normalizeKey(c)));
 
     for (let i = 0; i < Math.min(rows.length, 25); i++) {
-      const normRow = (rows[i] || []).map(c => normalizeKey(c));
+      const normRow = (rows[i] || []).map(any => normalizeKey(c));
       const idxInd = findIndex(normRow, synonyms.ind);
       if (idxInd !== -1) {
         headerRowIndex = i;
@@ -204,7 +203,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleAnalyze = async () => {
-    if (!process.env.API_KEY) return alert("API Key não configurada.");
+    
     if (!aiPrompt.trim()) return alert("Digite uma solicitação.");
     setAiLoading(true); setAiResult('');
     const systemContext = { Identidade: data.identity, Visao: data.visionLine, Mapa: data.perspectives.map(p => ({ p: p.name, objs: data.objectives.filter(o => o.perspectiveId === p.id).map(o => o.name) })) };
