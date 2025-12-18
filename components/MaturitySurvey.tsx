@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppData } from '../types';
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
-import { GoogleGenAI } from "@google/genai";
+
 
 interface DimensionScore {
   name: string;
@@ -146,8 +146,12 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
     }
   };
 
-  const handleGenerateAI = async () => {
-    if (!result || !process.env.API_KEY) return alert("Dados ou API Key ausentes.");
+const handleGenerateAI = async () => {
+  if (!result || !import.meta.env.VITE_GEMINI_API_KEY) {
+    alert("Dados ou API Key ausentes.");
+    return;
+  }
+
     setAiLoading(true);
     
     const scoresText = result.dimensionScores.map(d => `${d.name}: ${(d.average/5*100).toFixed(1)}%`).join(', ');
@@ -166,13 +170,26 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       5. Comentários Agregadores finais.`;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [{ parts: [{ text: promptText }] }]
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: promptText }]
+              }
+            ]
+          })
+        }
+      );
 
-      const text = response.text || "";
+      const dataAI = await response.json();
+
+      const text =
+        dataAI?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
       const parts = text.split('[BREAK]');
 
       const updatedReport = {
