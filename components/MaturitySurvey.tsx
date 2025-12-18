@@ -148,43 +148,47 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       4. Alertas de Risco Estratégico.
       5. Comentários Agregadores finais.`;
 
-    try {
+try {
   const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: prompt }]
-        }
-      ]
-    })
-  }
-);
-
-const data = await response.json();
-const text =
-  data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  
-
-      const parts = text.split('[BREAK]');
-      const updatedReport = {
-        diagnostico: parts[0]?.trim() || '',
-        analiseDimensoes: parts[1]?.trim() || '',
-        recomendacoes: parts[2]?.trim() || '',
-        riscos: parts[3]?.trim() || '',
-        comentariosFinais: parts[4]?.trim() || '',
-        validated: false
-      };
-      setReportData(updatedReport);
-      saveToLocal(result, updatedReport);
-    } catch (err) {
-      alert("Erro ao consultar a IA.");
-    } finally {
-      setAiLoading(false);
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }]
+          }
+        ]
+      })
     }
+  );
+
+  const data = await response.json();
+
+  const text =
+    data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  const parts = text.split('[BREAK]');
+
+  const updatedReport = {
+    diagnostico: parts[0]?.trim() || '',
+    analiseDimensoes: parts[1]?.trim() || '',
+    recomendacoes: parts[2]?.trim() || '',
+    riscos: parts[3]?.trim() || '',
+    comentariosFinais: parts[4]?.trim() || '',
+    validated: false
+  };
+
+  setReportData(updatedReport);
+  saveToLocal(result, updatedReport);
+
+} catch (err) {
+  alert("Erro ao consultar a IA.");
+} finally {
+  setAiLoading(false);
+}
+
   };
 
   const exportPDF = async () => {

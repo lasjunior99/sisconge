@@ -209,13 +209,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const systemContext = { Identidade: data.identity, Visao: data.visionLine, Mapa: data.perspectives.map(p => ({ p: p.name, objs: data.objectives.filter(o => o.perspectiveId === p.id).map(o => o.name) })) };
     try {
      
-    const response = await fetch(
+const response = await fetch(
   `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
   {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [
         {
@@ -241,6 +239,7 @@ const text =
   "Sem resposta.";
 
 setAiResult(text);
+
   
       setAiResult(response.text || "Sem resposta.");
     } catch (error) {
