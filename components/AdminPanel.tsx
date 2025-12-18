@@ -63,10 +63,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const rows = await excelParser.parse(file);
       if (!rows || rows.length < 2) throw new Error("Planilha sem dados.");
       
+      // Atualizado para 4 colunas: Perspectiva, Objetivo, Indicador, Gestor
       const mapped = rows.slice(1).map((row: any) => ({
         persp: String(row[0] || ''),
         obj: String(row[1] || ''),
-        ind: String(row[2] || '')
+        ind: String(row[2] || ''),
+        mgr: String(row[3] || '')
       })).filter(r => r.persp || r.obj || r.ind);
 
       setPreviewData(mapped);
@@ -83,18 +85,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     let newData = { ...data };
     
     previewData.forEach(row => {
+      // 1. Perspectiva
       let p = newData.perspectives.find(persp => normalizeKey(persp.name) === normalizeKey(row.persp));
       if (!p && row.persp) {
         p = { id: generateId('PERSP'), name: row.persp.trim() };
         newData.perspectives = [...newData.perspectives, p];
       }
       
+      // 2. Objetivo
       let o = newData.objectives.find(obj => normalizeKey(obj.name) === normalizeKey(row.obj) && obj.perspectiveId === p?.id);
       if (!o && row.obj && p) {
         o = { id: generateId('OBJ'), name: row.obj.trim(), perspectiveId: p.id, gestorId: '' };
         newData.objectives = [...newData.objectives, o];
       }
+
+      // 3. Gestor
+      let m = newData.managers.find(mgr => normalizeKey(mgr.name) === normalizeKey(row.mgr));
+      if (!m && row.mgr) {
+        m = { id: generateId('MGR'), name: row.mgr.trim() };
+        newData.managers = [...newData.managers, m];
+      }
       
+      // 4. Indicador
       if (row.ind && o && p) {
         const i = newData.indicators.find(ind => normalizeKey(ind.name) === normalizeKey(row.ind) && ind.objetivoId === o?.id);
         if (!i) {
@@ -103,7 +115,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             name: row.ind.trim(),
             objetivoId: o.id,
             perspectivaId: p.id,
-            gestorId: '',
+            gestorId: m ? m.id : '',
             description: '',
             formula: '',
             unit: 'num',
@@ -284,28 +296,91 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {activeSubTab === 'maturity-survey' && <MaturitySurvey data={data} />}
       
       {activeSubTab === 'import' && (
-        <div className="bg-white p-6 rounded shadow border">
-          <div className="mb-6 bg-blue-50 p-4 border rounded border-blue-100 grid grid-cols-4 gap-4 text-center">
-              <div><span className="block text-xs font-bold text-blue-400">Perspectivas</span><span className="text-xl font-bold">{data.perspectives.length}</span></div>
-              <div><span className="block text-xs font-bold text-blue-400">Objetivos</span><span className="text-xl font-bold">{data.objectives.length}</span></div>
-              <div><span className="block text-xs font-bold text-blue-400">Indicadores</span><span className="text-xl font-bold">{data.indicators.length}</span></div>
-              <div><span className="block text-xs font-bold text-blue-400">Gestores</span><span className="text-xl font-bold">{data.managers.length}</span></div>
-          </div>
-          {!showPreview ? (
-             <div className="space-y-4">
-                <div className="text-center p-12 border-2 border-dashed border-blue-200 rounded-lg cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileImport}/>
-                    <i className="ph ph-upload-simple text-3xl text-blue-400 mb-2"></i>
-                    <p className="text-blue-800 font-bold">Clique para carregar planilha Excel</p>
-                </div>
-                <div className="flex justify-center"><Button variant="danger" onClick={() => { if(confirm("Deseja apagar TODOS os registros de estrutura?")) onUpdate({...data, perspectives: [], objectives: [], indicators: []}, 'structure') }}>Apagar Estrutura Atual</Button></div>
-             </div>
-          ) : (
-            <div>
-               <div className="flex justify-between mb-4"><h3 className="font-bold">Pré-visualização</h3><div className="flex gap-2"><Button variant="secondary" onClick={() => setShowPreview(false)}>Limpar Preview</Button><Button onClick={confirmImport}>Confirmar Importação</Button></div></div>
-               <div className="overflow-auto max-h-96 border rounded"><table className="w-full text-xs text-left"><thead className="bg-slate-200"><tr><th className="p-2">Persp</th><th className="p-2">Obj</th><th className="p-2">Ind</th></tr></thead><tbody>{previewData.map((r, i) => <tr key={i} className="border-b"><td className="p-2">{r.persp}</td><td className="p-2">{r.obj}</td><td className="p-2">{r.ind}</td></tr>)}</tbody></table></div>
+        <div className="space-y-6 animate-fade-in">
+          {/* Guia de Orientação da Importação */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 shadow-sm">
+            <h3 className="text-blue-900 font-black flex items-center gap-2 mb-4 uppercase tracking-tight">
+              <i className="ph ph-info text-xl"></i> Guia de Orientação para Importação
+            </h3>
+            <p className="text-sm text-blue-800 mb-4 font-medium">
+              Para importar sua estrutura estratégica corretamente, utilize uma planilha Excel (.xlsx) com a seguinte disposição de colunas:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-white p-3 rounded border border-blue-200 text-center">
+                <span className="block text-[10px] font-black text-blue-400 uppercase">Coluna A</span>
+                <span className="font-bold text-slate-700">Perspectiva</span>
+              </div>
+              <div className="bg-white p-3 rounded border border-blue-200 text-center">
+                <span className="block text-[10px] font-black text-blue-400 uppercase">Coluna B</span>
+                <span className="font-bold text-slate-700">Objetivo</span>
+              </div>
+              <div className="bg-white p-3 rounded border border-blue-200 text-center">
+                <span className="block text-[10px] font-black text-blue-400 uppercase">Coluna C</span>
+                <span className="font-bold text-slate-700">Indicador</span>
+              </div>
+              <div className="bg-white p-3 rounded border border-blue-200 text-center">
+                <span className="block text-[10px] font-black text-blue-400 uppercase">Coluna D</span>
+                <span className="font-bold text-slate-700">Gestor</span>
+              </div>
             </div>
-          )}
+            <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside font-medium">
+              <li>A primeira linha deve conter os cabeçalhos (é ignorada pelo sistema).</li>
+              <li>Novos gestores, perspectivas e objetivos serão criados automaticamente se não existirem.</li>
+              <li>Certifique-se de que não há células mescladas.</li>
+            </ul>
+          </div>
+
+          <div className="bg-white p-6 rounded shadow border">
+            <div className="mb-6 bg-slate-50 p-4 border rounded border-slate-200 grid grid-cols-4 gap-4 text-center">
+                <div><span className="block text-xs font-bold text-slate-400">Perspectivas</span><span className="text-xl font-bold">{data.perspectives.length}</span></div>
+                <div><span className="block text-xs font-bold text-slate-400">Objetivos</span><span className="text-xl font-bold">{data.objectives.length}</span></div>
+                <div><span className="block text-xs font-bold text-slate-400">Indicadores</span><span className="text-xl font-bold">{data.indicators.length}</span></div>
+                <div><span className="block text-xs font-bold text-slate-400">Gestores</span><span className="text-xl font-bold">{data.managers.length}</span></div>
+            </div>
+            {!showPreview ? (
+               <div className="space-y-4">
+                  <div className="text-center p-12 border-2 border-dashed border-blue-200 rounded-lg cursor-pointer hover:bg-blue-50/50 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                      <input ref={fileInputRef} type="file" className="hidden" accept=".xlsx" onChange={handleFileImport}/>
+                      <i className="ph ph-upload-simple text-3xl text-blue-400 mb-2"></i>
+                      <p className="text-blue-800 font-bold">Clique para carregar planilha Excel</p>
+                      <p className="text-xs text-slate-400">Suporta apenas arquivos .xlsx</p>
+                  </div>
+                  <div className="flex justify-center"><Button variant="danger" onClick={() => { if(confirm("Deseja apagar TODOS os registros de estrutura?")) onUpdate({...data, perspectives: [], objectives: [], indicators: [], managers: []}, 'structure') }}>Apagar Estrutura Atual</Button></div>
+               </div>
+            ) : (
+              <div>
+                 <div className="flex justify-between mb-4 items-center">
+                   <h3 className="font-bold text-blue-900 uppercase text-sm">Pré-visualização da Importação</h3>
+                   <div className="flex gap-2">
+                     <Button variant="secondary" onClick={() => setShowPreview(false)}>Limpar Preview</Button>
+                     <Button onClick={confirmImport}>Confirmar Importação</Button>
+                   </div>
+                 </div>
+                 <div className="overflow-auto max-h-96 border rounded shadow-inner">
+                   <table className="w-full text-xs text-left">
+                     <thead className="bg-slate-200 sticky top-0">
+                       <tr>
+                         <th className="p-2 border-r">Perspectiva</th>
+                         <th className="p-2 border-r">Objetivo</th>
+                         <th className="p-2 border-r">Indicador</th>
+                         <th className="p-2">Gestor</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+                       {previewData.map((r, i) => (
+                         <tr key={i} className="border-b hover:bg-slate-50 transition-colors">
+                           <td className="p-2 border-r font-medium">{r.persp}</td>
+                           <td className="p-2 border-r font-medium">{r.obj}</td>
+                           <td className="p-2 border-r font-medium">{r.ind}</td>
+                           <td className="p-2 italic text-slate-500">{r.mgr}</td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
