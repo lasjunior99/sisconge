@@ -149,25 +149,37 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       5. Comentários Agregadores finais.`;
 
 try {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
-        ]
-      })
-    }
-  );
+const response = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text:
+                "Você é um consultor estratégico.\n\n" +
+                JSON.stringify(systemContext, null, 2) +
+                "\n\nSolicitação do usuário:\n" +
+                aiPrompt
+            }
+          ]
+        }
+      ]
+    })
+  }
+);
 
-  const data = await response.json();
+const dataAI = await response.json();
 
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+const text =
+  dataAI?.candidates?.[0]?.content?.parts?.[0]?.text ||
+  "Sem resposta.";
+
+setAiResult(text);
+
 
   const parts = text.split('[BREAK]');
 
