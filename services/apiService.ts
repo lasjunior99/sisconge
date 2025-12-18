@@ -27,53 +27,40 @@ const request = async (action: string, payload: any = {}, user: User | null = nu
     // 1. Não enviamos cabeçalhos personalizados (headers) para manter como "Simple Request"
     // 2. Usamos o modo 'cors' mas com redirecionamento explícito
     // 3. O corpo é enviado como texto puro
+
+const request = async (action: string, payload: any = {}, user: User | null = null): Promise<any> => {
+  if (!API_URL) {
+    notifyFn("Erro Crítico: URL da API não configurada.", 'error');
+    throw new Error("API URL missing");
+  }
+
+  try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      mode: 'cors',
-      cache: 'no-cache',
-      redirect: 'follow',
-      body: body
-      // Removidos os headers para garantir que o navegador não envie um Preflight OPTIONS
+      body: JSON.stringify({ action, payload, user })
     });
 
-    if (!response.ok) {
-      throw new Error(`Erro no servidor: ${response.status}`);
-    }
-
     const text = await response.text();
-    
+
     if (!text || text.trim() === "") {
       return { status: 'success' };
     }
 
-    try {
-        const json = JSON.parse(text);
-        if (json.status === 'error') {
-          throw new Error(json.message || 'Erro no processamento');
-        }
-        return json;
-    } catch (e) {
-        // Se não for JSON, mas contiver sucesso, consideramos OK
-        if (text.toLowerCase().includes('success') || text.toLowerCase().includes('ok')) {
-             return { status: 'success' };
-        }
-        console.warn("Resposta não-JSON recebida:", text);
-        throw new Error("Resposta inválida. Verifique se o Script está publicado como 'Anyone'.");
+    const json = JSON.parse(text);
+
+    if (json.status === 'error') {
+      throw new Error(json.message || 'Erro no processamento');
     }
+
+    return json;
+
   } catch (error: any) {
     console.error("API Connection Error:", error);
-    
-    // Erro específico de "Failed to Fetch"
-    if (error.name === 'TypeError' || error.message.includes('fetch')) {
-      const msg = "Erro de Conexão (CORS/Network). Verifique se o Script está publicado como 'Qualquer pessoa' (Anyone) e se a URL termina em /exec";
-      notifyFn(msg, 'error');
-      throw new Error(msg);
-    }
-    
-    notifyFn(error.message, 'error');
+    notifyFn("Erro de Conexão (CORS/Network). Verifique publicação do Script.", 'error');
     throw error;
   }
 };
+
 
 export const apiService = {
   login: async (email: string, password: string): Promise<User> => {
