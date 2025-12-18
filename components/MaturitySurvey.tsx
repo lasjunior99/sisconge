@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppData } from '../types';
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
-import { GoogleGenAI } from "@google/genai";
 
 interface DimensionScore {
   name: string;
@@ -134,7 +133,7 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
   };
 
   const handleGenerateAI = async () => {
-    if (!result || !process.env.API_KEY) return alert("Dados ou API Key ausentes.");
+    if (!result || !import.meta.env.VITE_GEMINI_API_KEY) return alert("Dados ou API Key ausentes.");
     setAiLoading(true);
     
     const prompt = `Você é um especialista em estratégia corporativa. Analise os resultados desta pesquisa de maturidade estratégica (escala 0-100):
@@ -150,13 +149,27 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       5. Comentários Agregadores finais.`;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ parts: [{ text: prompt }] }]
-      });
+  const response = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [{ text: prompt }]
+        }
+      ]
+    })
+  }
+);
 
-      const parts = (response.text || '').split('[BREAK]');
+const data = await response.json();
+const text =
+  data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  
+
+      const parts = text.split('[BREAK]');
       const updatedReport = {
         diagnostico: parts[0]?.trim() || '',
         analiseDimensoes: parts[1]?.trim() || '',
