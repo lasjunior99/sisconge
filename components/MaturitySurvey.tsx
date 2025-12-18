@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppData } from '../types';
 import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
+import { GoogleGenAI } from "@google/genai";
 
 interface DimensionScore {
   name: string;
@@ -53,9 +54,13 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
   useEffect(() => {
     const saved = localStorage.getItem('sisconge_maturity_survey');
     if (saved) {
-      const parsed = JSON.parse(saved);
-      setResult(parsed.result);
-      setReportData(parsed.reportData);
+      try {
+        const parsed = JSON.parse(saved);
+        setResult(parsed.result);
+        setReportData(parsed.reportData);
+      } catch (e) {
+        console.error("Erro ao carregar do localStorage", e);
+      }
     }
   }, []);
 
@@ -76,13 +81,13 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
 
       const scoresByDim: Record<string, number[]> = { 'D1_': [], 'D2_': [], 'D3_': [], 'D4_': [], 'D5_': [] };
       const comments: string[] = [];
-      let questionCount = 0;
+      let totalQuestions = 0;
 
       // Identify relevant columns
       const dimColumns = header.map((h, idx) => {
         const found = DIMENSIONS.find(d => h.toUpperCase().startsWith(d.prefix));
         if (found) {
-            questionCount++;
+            totalQuestions++;
             return { idx, prefix: found.prefix };
         }
         return null;
@@ -92,9 +97,10 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
 
       dataRows.forEach((row: any[]) => {
         dimColumns.forEach(col => {
-          const val = parseFloat(String(row[col!.idx] || ''));
+          if (!col) return;
+          const val = parseFloat(String(row[col.idx] || ''));
           if (!isNaN(val) && val >= 1 && val <= 5) {
-            scoresByDim[col!.prefix].push(val);
+            scoresByDim[col.prefix].push(val);
           }
         });
         if (commentIdx !== -1 && row[commentIdx]) {
@@ -114,7 +120,7 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
 
       const newResult: MaturityResult = {
         respondentsCount: dataRows.length,
-        questionCount: questionCount / dataRows.length, // approximation of questions per form
+        questionCount: dimColumns.length, 
         dimensionScores,
         scoreGeral: scoreFinal,
         level,
@@ -122,8 +128,16 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       };
 
       setResult(newResult);
-      setReportData({ ...reportData, validated: false });
-      saveToLocal(newResult, { ...reportData, validated: false });
+      const newReportData = {
+        diagnostico: '',
+        analiseDimensoes: '',
+        recomendacoes: '',
+        riscos: '',
+        comentariosFinais: '',
+        validated: false
+      };
+      setReportData(newReportData);
+      saveToLocal(newResult, newReportData);
       
     } catch (err: any) {
       alert(`Erro na importação: ${err.message}`);
@@ -133,74 +147,52 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
   };
 
   const handleGenerateAI = async () => {
-    if (!result || !import.meta.env.VITE_GEMINI_API_KEY) return alert("Dados ou API Key ausentes.");
+    if (!result || !process.env.API_KEY) return alert("Dados ou API Key ausentes.");
     setAiLoading(true);
     
-    const prompt = `Você é um especialista em estratégia corporativa. Analise os resultados desta pesquisa de maturidade estratégica (escala 0-100):
-      Score Geral: ${result.scoreGeral.toFixed(1)} (${result.level})
-      Scores por Dimensão: ${result.dimensionScores.map(d => `${d.name}: ${(d.average/5*100).toFixed(1)}`).join(', ')}
-      Comentários dos respondentes: ${result.comments.slice(0, 10).join(' | ')}
+    const scoresText = result.dimensionScores.map(d => `${d.name}: ${(d.average/5*100).toFixed(1)}%`).join(', ');
+    const commentsSummary = result.comments.slice(0, 5).join('; ');
 
-      Gere uma análise executiva estruturada exatamente nestes 5 blocos, separando-os por [BREAK]:
+    const promptText = `Você é um especialista em estratégia corporativa. Analise os resultados desta pesquisa de maturidade estratégica:
+      Score Geral: ${result.scoreGeral.toFixed(1)}% (${result.level})
+      Scores por Dimensão: ${scoresText}
+      Comentários dos respondentes: ${commentsSummary}
+
+      Gere uma análise executiva estruturada exatamente nestes 5 blocos, separando-os pela string "[BREAK]":
       1. Diagnóstico Geral Interpretativo.
-      2. Análise Crítica por Dimensão (foco em pontos fortes e fracos).
+      2. Análise Crítica por Dimensão.
       3. Recomendações Prioritárias para evolução.
       4. Alertas de Risco Estratégico.
       5. Comentários Agregadores finais.`;
 
-try {
-const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              text:
-                "Você é um consultor estratégico.\n\n" +
-                JSON.stringify(systemContext, null, 2) +
-                "\n\nSolicitação do usuário:\n" +
-                aiPrompt
-            }
-          ]
-        }
-      ]
-    })
-  }
-);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ parts: [{ text: promptText }] }]
+      });
 
-const dataAI = await response.json();
+      const text = response.text || "";
+      const parts = text.split('[BREAK]');
 
-const text =
-  dataAI?.candidates?.[0]?.content?.parts?.[0]?.text ||
-  "Sem resposta.";
+      const updatedReport = {
+        diagnostico: parts[0]?.trim() || '',
+        analiseDimensoes: parts[1]?.trim() || '',
+        recomendacoes: parts[2]?.trim() || '',
+        riscos: parts[3]?.trim() || '',
+        comentariosFinais: parts[4]?.trim() || '',
+        validated: false
+      };
 
-setAiResult(text);
+      setReportData(updatedReport);
+      saveToLocal(result, updatedReport);
 
-
-  const parts = text.split('[BREAK]');
-
-  const updatedReport = {
-    diagnostico: parts[0]?.trim() || '',
-    analiseDimensoes: parts[1]?.trim() || '',
-    recomendacoes: parts[2]?.trim() || '',
-    riscos: parts[3]?.trim() || '',
-    comentariosFinais: parts[4]?.trim() || '',
-    validated: false
-  };
-
-  setReportData(updatedReport);
-  saveToLocal(result, updatedReport);
-
-} catch (err) {
-  alert("Erro ao consultar a IA.");
-} finally {
-  setAiLoading(false);
-}
-
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao consultar a IA.");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const exportPDF = async () => {
