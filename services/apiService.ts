@@ -23,18 +23,21 @@ const request = async (action: string, payload: any = {}, user: User | null = nu
   try {
     const body = JSON.stringify({ action, payload, user });
     
+    // Para evitar erros de CORS (Failed to Fetch) com Google Apps Script:
+    // 1. Não enviamos cabeçalhos personalizados (headers) para manter como "Simple Request"
+    // 2. Usamos o modo 'cors' mas com redirecionamento explícito
+    // 3. O corpo é enviado como texto puro
     const response = await fetch(API_URL, {
       method: 'POST',
-      body: body,
-      mode: 'cors', 
+      mode: 'cors',
+      cache: 'no-cache',
       redirect: 'follow',
-      headers: {
-        'Content-Type': 'text/plain', // Essencial para evitar preflight OPTIONS no Google Apps Script
-      }
+      body: body
+      // Removidos os headers para garantir que o navegador não envie um Preflight OPTIONS
     });
 
     if (!response.ok) {
-      throw new Error(`Erro no servidor: ${response.status} ${response.statusText}`);
+      throw new Error(`Erro no servidor: ${response.status}`);
     }
 
     const text = await response.text();
@@ -46,23 +49,28 @@ const request = async (action: string, payload: any = {}, user: User | null = nu
     try {
         const json = JSON.parse(text);
         if (json.status === 'error') {
-          throw new Error(json.message || 'Erro desconhecido no servidor');
+          throw new Error(json.message || 'Erro no processamento');
         }
         return json;
     } catch (e) {
+        // Se não for JSON, mas contiver sucesso, consideramos OK
         if (text.toLowerCase().includes('success') || text.toLowerCase().includes('ok')) {
              return { status: 'success' };
         }
-        console.error("Erro ao parsear JSON:", text);
-        throw new Error("Resposta inválida do servidor. Verifique se o Script está publicado como 'Qualquer pessoa'.");
+        console.warn("Resposta não-JSON recebida:", text);
+        throw new Error("Resposta inválida. Verifique se o Script está publicado como 'Anyone'.");
     }
   } catch (error: any) {
     console.error("API Connection Error:", error);
+    
+    // Erro específico de "Failed to Fetch"
     if (error.name === 'TypeError' || error.message.includes('fetch')) {
-      notifyFn("Erro de Conexão: O servidor não respondeu (Failed to Fetch). Verifique sua internet ou se o Script foi desativado.", 'error');
-    } else {
-      notifyFn(error.message, 'error');
+      const msg = "Erro de Conexão (CORS/Network). Verifique se o Script está publicado como 'Qualquer pessoa' (Anyone) e se a URL termina em /exec";
+      notifyFn(msg, 'error');
+      throw new Error(msg);
     }
+    
+    notifyFn(error.message, 'error');
     throw error;
   }
 };
@@ -75,13 +83,13 @@ export const apiService = {
       let userData = res.user || res.data || (res.email ? res : null);
 
       if (!userData || !userData.email) {
-          throw new Error("Dados de usuário não recebidos do servidor.");
+          throw new Error("Usuário ou senha inválidos.");
       }
 
       if (!userData.nome && userData.name) userData.nome = userData.name;
       if (!userData.perfil) userData.perfil = 'LEITOR';
 
-      notifyFn("Login realizado!", "success");
+      notifyFn("Bem-vindo!", "success");
       return userData as User;
     } catch (e: any) {
       throw e;
@@ -113,6 +121,8 @@ export const apiService = {
         globalSettings: incoming.globalSettings || INITIAL_DATA.globalSettings,
       };
     } catch (e: any) {
+      // Em caso de falha de carregamento inicial, não bloqueia o app, usa os dados locais
+      console.warn("Usando dados locais de fallback.");
       return INITIAL_DATA;
     }
   },
@@ -121,12 +131,12 @@ export const apiService = {
     notifyFn("Salvando Visão...", "loading");
     try {
       await request('save_vision', { identity, visionLine }, user);
-      notifyFn("Salvo com sucesso!", "success");
+      notifyFn("Dados da Visão salvos!", "success");
     } catch (e: any) {}
   },
 
   saveStructure: async (data: AppData, user: User) => {
-    notifyFn("Salvando estrutura...", "loading");
+    notifyFn("Atualizando estrutura...", "loading");
     try {
       await request('save_structure', {
         perspectives: data.perspectives,
@@ -134,28 +144,28 @@ export const apiService = {
         objectives: data.objectives,
         indicators: data.indicators
       }, user);
-      notifyFn("Estrutura salva!", "success");
+      notifyFn("Estrutura atualizada!", "success");
     } catch (e: any) {}
   },
 
   saveIndicators: async (indicators: any[], user: User) => {
-    notifyFn("Salvando fichas...", "loading");
+    notifyFn("Gravando fichas técnicas...", "loading");
     try {
       await request('save_indicators', indicators, user);
-      notifyFn("Salvo!", "success");
+      notifyFn("Fichas técnicas salvas!", "success");
     } catch (e: any) {}
   },
 
   saveGoals: async (goals: any[], user: User) => {
-    notifyFn("Salvando metas...", "loading");
+    notifyFn("Gravando metas...", "loading");
     try {
       await request('save_goals', goals, user);
-      notifyFn("Metas salvas!", "success");
+      notifyFn("Planejamento de metas salvo!", "success");
     } catch (e: any) {}
   },
   
   saveUsers: async (users: User[], user: User) => {
-    notifyFn("Atualizando usuários...", "loading");
+    notifyFn("Sincronizando usuários...", "loading");
     try {
       await request('save_users', users, user);
       notifyFn("Usuários atualizados!", "success");
@@ -163,10 +173,10 @@ export const apiService = {
   },
 
   saveAdminSettings: async (settings: any, user: User) => {
-    notifyFn("Atualizando configurações...", "loading");
+    notifyFn("Configurações do sistema...", "loading");
     try {
       await request('save_admin_settings', settings, user);
-      notifyFn("Configurações atualizadas!", "success");
+      notifyFn("Configurações salvas!", "success");
     } catch (e: any) {}
   }
 };
@@ -175,7 +185,7 @@ export const excelParser = {
   parse: (file: File): Promise<any[]> => {
     return new Promise((resolve, reject) => {
       const XLSX = window.XLSX;
-      if (!XLSX) return reject(new Error("XLSX não disponível."));
+      if (!XLSX) return reject(new Error("Biblioteca XLSX não carregada."));
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
