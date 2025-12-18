@@ -4,7 +4,7 @@ import { Button } from './ui/Button';
 import { excelParser } from '../services/apiService';
 import { PasswordInput } from './ui/PasswordInput';
 import { MaturitySurvey } from './MaturitySurvey';
-import { GoogleGenAI } from "@google/genai";
+
 
 interface AdminPanelProps {
   data: AppData;
@@ -215,24 +215,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         objs: data.objectives.filter(o => o.perspectiveId === p.id).map(o => o.name) 
       })) 
     };
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: [{ 
-          parts: [{ 
-            text: "Você é um consultor estratégico. Responda baseado nos dados abaixo:\n\n" + 
-                  JSON.stringify(systemContext, null, 2) + 
-                  "\n\nSolicitação do usuário:\n" + 
-                  aiPrompt 
-          }] 
-        }]
-      });
-      setAiResult(response.text || "Sem resposta.");
-    } catch (error) {
-      console.error(error);
-      alert("Erro na IA.");
-    } finally { setAiLoading(false); }
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text:
+                    "Você é um consultor estratégico. Responda baseado nos dados abaixo:\n\n" +
+                    JSON.stringify(systemContext, null, 2) +
+                    "\n\nSolicitação do usuário:\n" +
+                    aiPrompt
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const dataAI = await response.json();
+
+    const text =
+      dataAI?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Sem resposta.";
+
+    setAiResult(text);
+
+  } catch (error) {
+    console.error(error);
+    alert("Erro na IA.");
+  } finally {
+    setAiLoading(false);
+  }
+
   };
 
   return (
