@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppData, Indicator, Goal, Manager } from '../types';
 import { Button } from './ui/Button';
+import { Tooltip } from './ui/Tooltip';
 
 interface PerformanceResult {
   meta: number;
@@ -32,16 +33,8 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
   const [filterInd, setFilterInd] = useState('');
   const [filterMgr, setFilterMgr] = useState('');
 
-  const [referenceYear, setReferenceYear] = useState<number>(new Date().getFullYear());
-
-  useEffect(() => {
-     const years = data.goals.map(g => g.year).filter(y => y);
-     if (years.length > 0) {
-        setReferenceYear(years[0]);
-     } else {
-        setReferenceYear(new Date().getFullYear());
-     }
-  }, [data.goals]);
+  // Use the identity reference year
+  const referenceYear = data.identity.referenceYear || new Date().getFullYear();
 
   const parseVal = (v: string | undefined): number => {
     if (!v) return 0;
@@ -85,7 +78,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
         calcReal = reais[monthIdx];
         if (!hasReais[monthIdx]) return defaultResult;
         break;
-
       case 'accumulated':
       case 'ytd':
         for (let i = 0; i <= monthIdx; i++) {
@@ -96,7 +88,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
         }
         if (calcReal === 0 && !hasReais.some((v, k) => k <= monthIdx && v)) return defaultResult;
         break;
-
       case 'average':
         for (let i = 0; i <= monthIdx; i++) {
             if (hasReais[i]) {
@@ -112,7 +103,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
             return defaultResult;
         }
         break;
-
       case 'rolling':
         const start = Math.max(0, monthIdx - rollingWindow + 1);
         for (let i = start; i <= monthIdx; i++) {
@@ -157,9 +147,9 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
         pct: pct,
         color: colorClass,
         icon,
-        displayMeta: calcMeta.toLocaleString('pt-BR', { maximumFractionDigits: 2 }),
-        displayReal: calcReal.toLocaleString('pt-BR', { maximumFractionDigits: 2 }),
-        displayPct: pct.toFixed(1) + '%',
+        displayMeta: calcMeta.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        displayReal: calcReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        displayPct: pct.toFixed(2) + '%',
         valid: true
     };
   };
@@ -183,7 +173,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
   const groupedData = filteredPerspectives.map(p => {
       const objectives = filteredObjectives.filter(o => o.perspectiveId === p.id).map(obj => {
           const indicators = filteredIndicators.filter(i => i.objetivoId === obj.id).map(ind => {
-              const goal = data.goals.find(g => g.indicatorId === ind.id);
+              const goal = data.goals.find(g => g.indicatorId === ind.id && g.year === referenceYear);
               const perf = calculatePerformance(ind, goal, selectedMonthIndex);
               return { ...ind, perf };
           });
@@ -193,34 +183,23 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
   });
 
   const exportPDF = async () => {
-     if (!reportRef.current || !window.html2canvas || !window.jspdf) {
-         alert("Bibliotecas não carregadas.");
-         return;
-     }
-     const element = reportRef.current;
-     try {
-         const canvas = await window.html2canvas(element, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
-         const imgData = canvas.toDataURL('image/png');
-         const { jsPDF } = window.jspdf;
-         const pdf = new jsPDF('p', 'mm', 'a4');
-         const pdfWidth = pdf.internal.pageSize.getWidth();
-         const imgProps = pdf.getImageProperties(imgData);
-         const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
-         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
-         pdf.save(`Contrato_Gestao_${MONTH_NAMES[selectedMonthIndex]}.pdf`);
-     } catch(e) {
-         alert("Erro ao gerar PDF.");
-     }
+     if (!reportRef.current || !window.html2canvas || !window.jspdf) return;
+     const canvas = await window.html2canvas(reportRef.current, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
+     const imgData = canvas.toDataURL('image/png');
+     const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+     const pdfWidth = pdf.internal.pageSize.getWidth();
+     const h = (canvas.height * pdfWidth) / canvas.width;
+     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, h);
+     pdf.save(`Contrato_Gestao_${referenceYear}.pdf`);
   };
 
   const handleExportExcel = () => {
-      if (!window.XLSX) return alert("Erro: Biblioteca Excel não carregada.");
+      if (!window.XLSX) return;
       const XLSX = window.XLSX;
       const wb = XLSX.utils.book_new();
-      const companyName = data.identity.companyName || "EMPRESA";
       const monthNamesShort = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
       
-      const row1 = [`EMPRESA: ${companyName}`, "", "", "", `ANO DE REFERÊNCIA: ${referenceYear}`];
+      const row1 = [`EMPRESA: ${data.identity.companyName}`, "", "", "", `ANO DE REFERÊNCIA: ${referenceYear}`];
       const row2 = ["PERSPECTIVAS", "OBJETIVOS ESTRATÉGICOS", "INDICADORES", "RESPONSÁVEL"];
       monthNamesShort.forEach(m => row2.push(m, "", ""));
 
@@ -232,7 +211,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
           const perspName = data.perspectives.find(p => p.id === ind.perspectivaId)?.name || "";
           const objName = data.objectives.find(o => o.id === ind.objetivoId)?.name || "";
           const mgrName = data.managers.find(m => m.id === ind.gestorId)?.name || "";
-          const goal = data.goals.find(g => g.indicatorId === ind.id);
+          const goal = data.goals.find(g => g.indicatorId === ind.id && g.year === referenceYear);
           const row = [perspName, objName, ind.name, mgrName];
           for(let i=0; i<12; i++) {
              const perf = calculatePerformance(ind, goal, i);
@@ -259,111 +238,67 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
       <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-6 sticky top-14 z-10">
          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <div>
-                <h2 className="text-xl font-bold text-blue-900 uppercase tracking-tight flex items-center gap-2">
-                    <i className="ph ph-chart-pie-slice"></i> Painel de Resultados
-                </h2>
-                <p className="text-xs text-slate-500">Aferição Oficial do Contrato de Gestão</p>
+              <h2 className="text-xl font-bold text-blue-900 uppercase"> Painel de Resultados</h2>
+              <p className="text-xs text-slate-500">Ano: {referenceYear}</p>
             </div>
             <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
-                    <button onClick={() => setSelectedMonthIndex(Math.max(0, selectedMonthIndex - 1))} className="p-2 hover:bg-white rounded shadow-sm text-slate-600"><i className="ph ph-caret-left"></i></button>
-                    <span className="w-32 text-center font-bold text-blue-900 text-sm uppercase">{MONTH_NAMES[selectedMonthIndex]}</span>
-                    <button onClick={() => setSelectedMonthIndex(Math.min(11, selectedMonthIndex + 1))} className="p-2 hover:bg-white rounded shadow-sm text-slate-600"><i className="ph ph-caret-right"></i></button>
+                    <button onClick={() => setSelectedMonthIndex(Math.max(0, selectedMonthIndex - 1))} className="p-2 hover:bg-white rounded"><i className="ph ph-caret-left"></i></button>
+                    <span className="w-32 text-center font-bold text-blue-900 text-sm uppercase flex items-center justify-center gap-1">
+                      {MONTH_NAMES[selectedMonthIndex]}
+                      <Tooltip text="Período ao qual o resultado informado se refere." />
+                    </span>
+                    <button onClick={() => setSelectedMonthIndex(Math.min(11, selectedMonthIndex + 1))} className="p-2 hover:bg-white rounded"><i className="ph ph-caret-right"></i></button>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="secondary" onClick={handleExportExcel} className="flex items-center gap-2 bg-green-50 text-green-700 hover:bg-green-100 border-green-200">
-                        <i className="ph ph-microsoft-excel-logo"></i> Excel
-                    </Button>
-                    <Button variant="secondary" onClick={exportPDF} className="flex items-center gap-2">
-                        <i className="ph ph-file-pdf"></i> PDF
-                    </Button>
+                    <Button variant="secondary" onClick={handleExportExcel} className="bg-green-50 text-green-700">Excel</Button>
+                    <Button variant="secondary" onClick={exportPDF}>PDF</Button>
                 </div>
             </div>
          </div>
-         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-4 border-t border-slate-100">
-            <select className="p-2 text-xs border rounded bg-slate-50" value={filterPersp} onChange={e => { setFilterPersp(e.target.value); setFilterObj(''); }}>
-               <option value="">Todas Perspectivas</option>
-               {data.perspectives.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <select className="p-2 text-xs border rounded bg-slate-50" value={filterObj} onChange={e => setFilterObj(e.target.value)} disabled={!filterPersp && data.objectives.length > 50}>
-               <option value="">Todos Objetivos</option>
-               {data.objectives.filter(o => !filterPersp || o.perspectiveId === filterPersp).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-            <select className="p-2 text-xs border rounded bg-slate-50" value={filterMgr} onChange={e => setFilterMgr(e.target.value)}>
-               <option value="">Todos Gestores</option>
-               {data.managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <select className="p-2 text-xs border rounded bg-slate-50" value={filterInd} onChange={e => setFilterInd(e.target.value)}>
-               <option value="">Todos Indicadores</option>
-               {filteredIndicators.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-            </select>
-         </div>
       </div>
-
-      <div ref={reportRef} className="bg-white shadow-xl rounded-lg overflow-hidden border border-slate-200 p-8 max-w-[1200px] mx-auto">
+      <div ref={reportRef} className="bg-white shadow-xl rounded-lg border p-8 max-w-[1200px] mx-auto">
           <div className="border-b-2 border-blue-900 pb-4 mb-6 flex justify-between items-end">
-              <div>
-                  <h1 className="text-2xl font-black text-slate-800 uppercase">{data.identity.companyName || 'EMPRESA'}</h1>
-                  <h2 className="text-sm font-medium text-slate-500 uppercase tracking-widest">Relatório de Desempenho • {MONTH_NAMES[selectedMonthIndex]}</h2>
-              </div>
-              <div className="text-right">
-                 <div className="text-[10px] text-slate-400 uppercase">Ano de Referência</div>
-                 <div className="font-mono text-xl font-bold text-blue-900">{referenceYear}</div>
-              </div>
-          </div>
-          <div className="flex justify-end gap-4 mb-4 text-[10px] font-bold uppercase tracking-wide">
-             <div className="flex items-center gap-1"><span className="w-3 h-3 bg-blue-600 rounded-full"></span> Superação (&gt;110%)</div>
-             <div className="flex items-center gap-1"><span className="w-3 h-3 bg-green-600 rounded-full"></span> Meta (100-110%)</div>
-             <div className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded-full"></span> Atenção (90-99%)</div>
-             <div className="flex items-center gap-1"><span className="w-3 h-3 bg-red-600 rounded-full"></span> Crítico (&lt;90%)</div>
+              <div><h1 className="text-2xl font-black text-slate-800 uppercase">{data.identity.companyName}</h1><h2 className="text-sm font-medium text-slate-500 uppercase">Desempenho • {MONTH_NAMES[selectedMonthIndex]}</h2></div>
+              <div className="text-right"><div className="text-[10px] text-slate-400">Ano Referência</div><div className="font-mono text-xl font-bold text-blue-900">{referenceYear}</div></div>
           </div>
           <div className="flex flex-col gap-8">
-              {groupedData.length === 0 && <div className="text-center py-10 text-slate-400">Nenhum resultado encontrado.</div>}
               {groupedData.map(persp => (
                   <div key={persp.id} className="break-inside-avoid">
-                      <div className="bg-slate-800 text-white p-3 rounded-t-lg flex items-center gap-2 shadow-md">
-                          <i className="ph ph-squares-four text-lg text-blue-300"></i>
-                          <span className="font-bold text-sm uppercase tracking-wider">{persp.name}</span>
+                      <div className="bg-slate-800 text-white p-3 rounded-t-lg font-bold text-xs uppercase flex items-center gap-1">
+                        {persp.name}
+                        <Tooltip text="Eixo estratégico ao qual o indicador pertence." />
                       </div>
-                      <div className="border-x border-b border-slate-200 bg-slate-50 p-4 rounded-b-lg space-y-4">
+                      <div className="border-x border-b p-4 space-y-4 bg-slate-50">
                           {persp.objectives.map(obj => (
-                              <div key={obj.id} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                                  <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
-                                      <div className="font-bold text-slate-700 text-xs uppercase flex items-center gap-2">
-                                          <i className="ph ph-target text-blue-600"></i> {obj.name}
-                                      </div>
+                              <div key={obj.id} className="bg-white border rounded shadow-sm">
+                                  <div className="bg-slate-100 px-4 py-1 border-b font-bold text-[10px] uppercase text-slate-700 flex items-center gap-1">
+                                    {obj.name}
+                                    <Tooltip text="Objetivo estratégico associado ao indicador monitorado." />
                                   </div>
-                                  <table className="w-full text-xs">
-                                      <thead className="bg-slate-50 text-slate-500 font-bold border-b">
+                                  <table className="w-full text-[11px]">
+                                      <thead className="bg-slate-50 border-b text-[10px] text-slate-400 uppercase">
                                           <tr>
-                                              <th className="p-3 text-left w-1/3">Indicador</th>
-                                              <th className="p-3 text-center">Tipo Cálculo</th>
-                                              <th className="p-3 text-center">Unid.</th>
-                                              <th className="p-3 text-right">Meta</th>
-                                              <th className="p-3 text-right">Realizado</th>
-                                              <th className="p-3 text-center">Desempenho</th>
-                                              <th className="p-3 text-center w-16">Farol</th>
+                                            <th className="p-2 text-left w-1/3 flex items-center gap-1">Indicador <Tooltip text="Indicador que receberá o valor realizado no período." /></th>
+                                            <th className="p-2 text-right">Meta</th>
+                                            <th className="p-2 text-right flex items-center justify-end gap-1">Real <Tooltip text="Resultado efetivamente alcançado no período, conforme a ficha técnica do indicador." /></th>
+                                            <th className="p-2 text-center">%</th>
+                                            <th className="p-2 text-center w-12 flex items-center justify-center gap-1">F <Tooltip text="Classificação automática do desempenho (Semáforo)." /></th>
                                           </tr>
                                       </thead>
-                                      <tbody className="divide-y divide-slate-100">
+                                      <tbody>
                                           {obj.indicators.map(ind => (
-                                              <tr key={ind.id} className="hover:bg-blue-50/50 transition-colors">
-                                                  <td className="p-3 font-medium text-slate-800">
+                                              <tr key={ind.id} className="border-b last:border-0">
+                                                  <td className="p-2 font-medium">
+                                                    <div className="flex items-center gap-1">
                                                       {ind.name}
-                                                      <div className="text-[10px] text-slate-400 font-normal truncate max-w-[200px]">{ind.description}</div>
+                                                      <Tooltip text={`Regra: ${ind.calcType === 'isolated' ? 'ISOLADO' : ind.calcType?.toUpperCase()}. ${ind.description || ''}`} />
+                                                    </div>
                                                   </td>
-                                                  <td className="p-3 text-center text-slate-500 uppercase font-semibold text-[10px]">
-                                                      {ind.calcType === 'rolling' ? `Rolling (${ind.rollingWindow}m)` : ind.calcType || 'Isolado'}
-                                                  </td>
-                                                  <td className="p-3 text-center text-slate-500">{ind.unit}</td>
-                                                  <td className="p-3 text-right font-mono font-medium text-slate-700">{ind.perf.valid ? ind.perf.displayMeta : '-'}</td>
-                                                  <td className="p-3 text-right font-mono font-bold text-blue-900">{ind.perf.valid ? ind.perf.displayReal : '-'}</td>
-                                                  <td className="p-3 text-center">{ind.perf.valid ? <span className="font-bold">{ind.perf.displayPct}</span> : '-'}</td>
-                                                  <td className="p-3 text-center">
-                                                      <div className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center shadow-sm ${ind.perf.color}`}>
-                                                          <i className={`ph ph-${ind.perf.icon} text-sm`}></i>
-                                                      </div>
-                                                  </td>
+                                                  <td className="p-2 text-right">{ind.perf.displayMeta}</td>
+                                                  <td className="p-2 text-right font-bold text-blue-900">{ind.perf.displayReal}</td>
+                                                  <td className="p-2 text-center font-bold">{ind.perf.displayPct}</td>
+                                                  <td className="p-2 text-center"><div className={`w-6 h-6 mx-auto rounded-full flex items-center justify-center text-white ${ind.perf.color}`}><i className={`ph ph-${ind.perf.icon} text-[10px]`}></i></div></td>
                                               </tr>
                                           ))}
                                       </tbody>
@@ -373,9 +308,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ data }) => {
                       </div>
                   </div>
               ))}
-          </div>
-          <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400">
-              Documento gerado automaticamente pelo SISCONGE • Contrato de Gestão • Uso Interno
           </div>
       </div>
     </div>

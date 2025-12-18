@@ -16,6 +16,12 @@ export interface Objective {
   name: string;
 }
 
+export interface TextStyle {
+  font: string;
+  size: number;
+  color: string;
+}
+
 export interface Indicator {
   id: string;
   perspectivaId: string;
@@ -30,15 +36,9 @@ export interface Indicator {
   polarity: string;
   status: 'draft' | 'final';
   updatedAt: string;
-  // Novos tipos de cálculo adicionados
   calcType?: 'isolated' | 'accumulated' | 'average' | 'rolling' | 'ytd';
-  rollingWindow?: number; // Para cálculo Rolling (ex: 3, 6, 12 meses)
-  semaphore?: {
-    blue: string;
-    green: string;
-    yellow: string;
-    red: string;
-  };
+  rollingWindow?: number;
+  semaphore?: SemaphoreSettings;
 }
 
 export interface Goal {
@@ -46,9 +46,9 @@ export interface Goal {
   indicatorId: string;
   year: number;
   history: { year: number; value: string }[];
-  monthlyValues: string[];     // Metas Planejadas
-  monthlyRealized?: string[];  // Valores Realizados
-  locked?: boolean;            // Controle de Edição
+  monthlyValues: string[];
+  monthlyRealized?: string[];
+  locked?: boolean;
 }
 
 export interface User {
@@ -56,10 +56,9 @@ export interface User {
   nome: string;
   perfil: 'ADMIN' | 'EDITOR' | 'LEITOR';
   ativo: boolean;
-  senha?: string; // Usado apenas na edição, nunca exposto em logs
+  senha?: string;
 }
 
-// --- NOVAS INTERFACES ---
 export interface StrategicIdentity {
   companyName: string;
   logoUrl: string;
@@ -68,28 +67,44 @@ export interface StrategicIdentity {
   mission: string;
   vision: string;
   values: string;
-  horizonStart?: number; // Novo campo
-  horizonEnd?: number;   // Novo campo
+  horizonStart?: number;
+  horizonEnd?: number;
+  referenceYear: number;
+  styles?: {
+    purpose?: TextStyle;
+    business?: TextStyle;
+    mission?: TextStyle;
+    vision?: TextStyle;
+    values?: TextStyle;
+  };
 }
 
 export interface VisionMilestone {
   id: string;
   year: number;
   description: string;
+  style?: TextStyle;
+}
+
+export interface SemaphoreRule {
+  operator: '=' | '>' | '<' | '>=' | '<=' | 'between';
+  value: string; // Used for single value
+  value2?: string; // Used for "between"
+}
+
+export interface SemaphoreSettings {
+  blue: SemaphoreRule;
+  green: SemaphoreRule;
+  yellow: SemaphoreRule;
+  red: SemaphoreRule;
 }
 
 export interface GlobalSettings {
-  semaphore: {
-    blue: string;
-    green: string;
-    yellow: string;
-    red: string;
-  };
+  semaphore: SemaphoreSettings;
 }
-// -----------------------
 
 export interface AppData {
-  adminPassword?: string; // Senha global do admin
+  adminPassword?: string;
   identity: StrategicIdentity; 
   visionLine: VisionMilestone[];
   perspectives: Perspective[];
@@ -98,11 +113,13 @@ export interface AppData {
   indicators: Indicator[];
   goals: Goal[];
   users: User[];
-  globalSettings?: GlobalSettings; // Configurações Globais
+  globalSettings?: GlobalSettings;
 }
 
+const DEFAULT_TEXT_STYLE: TextStyle = { font: 'sans-serif', size: 14, color: '#334155' };
+
 export const INITIAL_DATA: AppData = {
-  adminPassword: '123456', // Senha provisória padrão definida explicitamente
+  adminPassword: '123456',
   identity: {
     companyName: '',
     logoUrl: '',
@@ -112,7 +129,15 @@ export const INITIAL_DATA: AppData = {
     vision: '',
     values: '',
     horizonStart: new Date().getFullYear(),
-    horizonEnd: new Date().getFullYear() + 4
+    horizonEnd: new Date().getFullYear() + 4,
+    referenceYear: new Date().getFullYear(),
+    styles: {
+      purpose: { ...DEFAULT_TEXT_STYLE },
+      business: { ...DEFAULT_TEXT_STYLE },
+      mission: { ...DEFAULT_TEXT_STYLE },
+      vision: { ...DEFAULT_TEXT_STYLE, size: 16 },
+      values: { ...DEFAULT_TEXT_STYLE }
+    }
   },
   visionLine: [],
   perspectives: [],
@@ -123,15 +148,14 @@ export const INITIAL_DATA: AppData = {
   users: [],
   globalSettings: {
     semaphore: {
-      blue: 'Acima de 110%',
-      green: 'De 100% a 110%',
-      yellow: 'De 90% a 99%',
-      red: 'Abaixo de 90%'
+      blue: { operator: '>=', value: '110.00' },
+      green: { operator: '>=', value: '100.00' },
+      yellow: { operator: 'between', value: '90.00', value2: '99.99' },
+      red: { operator: '<', value: '90.00' }
     }
   }
 };
 
-// Declaração global para bibliotecas carregadas via CDN
 declare global {
   interface Window {
     XLSX: any;

@@ -1,9 +1,10 @@
-/// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_GEMINI_API_KEY: string;
+// Fix: Correcting process.env type definitions to avoid re-declaration errors
+declare global {
+  namespace NodeJS {
+    interface ProcessEnv {
+      API_KEY: string;
+    }
+  }
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+export {};
