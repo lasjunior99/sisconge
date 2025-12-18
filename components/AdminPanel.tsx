@@ -29,7 +29,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [passData, setPassData] = useState({ current: '', new: '', confirm: '' });
   
-  // Semaphore Local State
   const [globalSem, setGlobalSem] = useState(data.globalSettings?.semaphore || INITIAL_DATA.globalSettings!.semaphore);
 
   const [aiPrompt, setAiPrompt] = useState('');
@@ -126,6 +125,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleAnalyze = async () => {
     if (!aiPrompt.trim()) return alert("Digite uma solicitação.");
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return alert("Erro: Chave de API não configurada no ambiente.");
+
     setAiLoading(true); setAiResult('');
     const systemContext = { 
       Identidade: data.identity, 
@@ -136,22 +138,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       })) 
     };
     try {
-      // Create a new GoogleGenAI instance right before making an API call to ensure it uses up-to-date API key
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = "Você é um consultor estratégico executivo. Responda baseado nos dados abaixo:\n\n" + 
                     JSON.stringify(systemContext, null, 2) + 
                     "\n\nSolicitação do usuário:\n" + 
                     aiPrompt;
 
-      // Fix: adherent call using simple string contents and adhering to response extraction rules
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: prompt,
       });
-      setAiResult(response.text || "Sem resposta.");
-    } catch (error) {
+      setAiResult(response.text || "Sem resposta da IA.");
+    } catch (error: any) {
       console.error(error);
-      alert("Erro na IA.");
+      alert(`Erro na IA: ${error.message || 'Falha na requisição (Failed to fetch)'}`);
     } finally { setAiLoading(false); }
   };
 
