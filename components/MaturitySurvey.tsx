@@ -166,7 +166,7 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
   };
 
   const handleGenerateAI = async () => {
-    if (!result || !process.env.API_KEY) return alert("Dados ou API Key ausentes.");
+    if (!result) return alert("Dados da pesquisa ausentes. Importe a planilha primeiro.");
     setAiLoading(true);
     
     const scoresText = result.dimensionScores.map(d => `${d.name}: ${(d.average/5*100).toFixed(1)}%`).join(', ');
@@ -185,9 +185,8 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       5. Comentários Agregadores finais.`;
 
     try {
-      // Create a new GoogleGenAI instance right before making an API call
+      // Instanciação direta usando process.env.API_KEY conforme diretrizes
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      // Fix: adherent call using simple string contents and property access for .text
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: promptText
@@ -209,9 +208,9 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
       setReportData(updatedReport);
       saveToLocal(result, updatedReport);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Erro ao consultar a IA.");
+      alert(`Erro ao consultar a IA: ${err.message || 'Falha de comunicação'}`);
     } finally {
       setAiLoading(false);
     }
@@ -229,11 +228,9 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
     let heightLeft = h;
     let position = 0;
 
-    // First page
     pdf.addImage(imgData, 'PNG', 0, position, w, h);
     heightLeft -= pageHeight;
 
-    // Remaining pages
     while (heightLeft > 0) {
       position = heightLeft - h;
       pdf.addPage();
@@ -339,7 +336,6 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* SECTION 1: IMPORT */}
       <div className="bg-white p-6 rounded shadow border">
         <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-lg text-blue-900 flex items-center gap-2">
@@ -449,7 +445,6 @@ export const MaturitySurvey: React.FC<{ data: AppData }> = ({ data }) => {
              </div>
           </div>
 
-          {/* HIDDEN PRINT VIEW */}
           <div style={{position: 'absolute', left: '-9999px'}}>
               <div ref={reportRef} className="bg-white p-16 w-[900px] text-slate-900 flex flex-col gap-8">
                   <div className="border-b-4 border-blue-900 pb-6 flex justify-between items-end">

@@ -63,7 +63,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const rows = await excelParser.parse(file);
       if (!rows || rows.length < 2) throw new Error("Planilha sem dados.");
       
-      // Atualizado para 4 colunas: Perspectiva, Objetivo, Indicador, Gestor
       const mapped = rows.slice(1).map((row: any) => ({
         persp: String(row[0] || ''),
         obj: String(row[1] || ''),
@@ -85,28 +84,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     let newData = { ...data };
     
     previewData.forEach(row => {
-      // 1. Perspectiva
       let p = newData.perspectives.find(persp => normalizeKey(persp.name) === normalizeKey(row.persp));
       if (!p && row.persp) {
         p = { id: generateId('PERSP'), name: row.persp.trim() };
         newData.perspectives = [...newData.perspectives, p];
       }
       
-      // 2. Objetivo
       let o = newData.objectives.find(obj => normalizeKey(obj.name) === normalizeKey(row.obj) && obj.perspectiveId === p?.id);
       if (!o && row.obj && p) {
         o = { id: generateId('OBJ'), name: row.obj.trim(), perspectiveId: p.id, gestorId: '' };
         newData.objectives = [...newData.objectives, o];
       }
 
-      // 3. Gestor
       let m = newData.managers.find(mgr => normalizeKey(mgr.name) === normalizeKey(row.mgr));
       if (!m && row.mgr) {
         m = { id: generateId('MGR'), name: row.mgr.trim() };
         newData.managers = [...newData.managers, m];
       }
       
-      // 4. Indicador
       if (row.ind && o && p) {
         const i = newData.indicators.find(ind => normalizeKey(ind.name) === normalizeKey(row.ind) && ind.objetivoId === o?.id);
         if (!i) {
@@ -137,10 +132,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleAnalyze = async () => {
     if (!aiPrompt.trim()) return alert("Digite uma solicitação.");
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) return alert("Erro: Chave de API não configurada no ambiente.");
 
-    setAiLoading(true); setAiResult('');
+    setAiLoading(true); 
+    setAiResult('');
+    
     const systemContext = { 
       Identidade: data.identity, 
       Visao: data.visionLine, 
@@ -149,8 +144,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         objs: data.objectives.filter(o => o.perspectiveId === p.id).map(o => o.name) 
       })) 
     };
+
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // Sempre instanciar novo para garantir uso da chave de ambiente process.env.API_KEY
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = "Você é um consultor estratégico executivo. Responda baseado nos dados abaixo:\n\n" + 
                     JSON.stringify(systemContext, null, 2) + 
                     "\n\nSolicitação do usuário:\n" + 
@@ -163,7 +160,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setAiResult(response.text || "Sem resposta da IA.");
     } catch (error: any) {
       console.error(error);
-      alert(`Erro na IA: ${error.message || 'Falha na requisição (Failed to fetch)'}`);
+      alert(`Erro na IA: ${error.message || 'Falha na requisição'}`);
     } finally { setAiLoading(false); }
   };
 
@@ -297,7 +294,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       
       {activeSubTab === 'import' && (
         <div className="space-y-6 animate-fade-in">
-          {/* Guia de Orientação da Importação */}
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 shadow-sm">
             <h3 className="text-blue-900 font-black flex items-center gap-2 mb-4 uppercase tracking-tight">
               <i className="ph ph-info text-xl"></i> Guia de Orientação para Importação
