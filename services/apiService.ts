@@ -14,6 +14,10 @@ let notifyFn: (msg: string, type: 'success' | 'error' | 'loading' | 'info') => v
 
 export const setNotificationHandler = (fn: any) => { notifyFn = fn; };
 
+/**
+ * Função central de comunicação com o Google Apps Script.
+ * Configurada para evitar Preflight OPTIONS (CORS) que o GAS não suporta nativamente.
+ */
 const request = async (action: string, payload: any = {}, user: User | null = null): Promise<any> => {
   if (!API_URL) {
     notifyFn("Erro Crítico: URL da API não configurada.", 'error');
@@ -23,44 +27,45 @@ const request = async (action: string, payload: any = {}, user: User | null = nu
   try {
     const body = JSON.stringify({ action, payload, user });
     
-    // Para evitar erros de CORS (Failed to Fetch) com Google Apps Script:
-    // 1. Não enviamos cabeçalhos personalizados (headers) para manter como "Simple Request"
-    // 2. Usamos o modo 'cors' mas com redirecionamento explícito
-    // 3. O corpo é enviado como texto puro
-
-const request = async (action: string, payload: any = {}, user: User | null = null): Promise<any> => {
-  if (!API_URL) {
-    notifyFn("Erro Crítico: URL da API não configurada.", 'error');
-    throw new Error("API URL missing");
-  }
-
-  try {
     const response = await fetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({ action, payload, user })
+      mode: 'cors',
+      cache: 'no-cache',
+      redirect: 'follow',
+      body: body
+      // Importante: Não enviamos Content-Type: application/json para manter como "Simple Request"
+      // O Google Apps Script receberá o JSON no e.postData.contents
     });
 
-    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Erro no servidor: ${response.status}`);
+    }
 
+    const text = await response.text();
+    
     if (!text || text.trim() === "") {
       return { status: 'success' };
     }
 
-    const json = JSON.parse(text);
-
-    if (json.status === 'error') {
-      throw new Error(json.message || 'Erro no processamento');
+    try {
+        const json = JSON.parse(text);
+        if (json.status === 'error') {
+          throw new Error(json.message || 'Erro no processamento');
+        }
+        return json;
+    } catch (e) {
+        if (text.toLowerCase().includes('success') || text.toLowerCase().includes('ok')) {
+             return { status: 'success' };
+        }
+        console.error("Erro ao parsear resposta:", text);
+        throw new Error("Resposta inválida do servidor. Verifique a publicação do Script.");
     }
-
-    return json;
-
   } catch (error: any) {
     console.error("API Connection Error:", error);
-    notifyFn("Erro de Conexão (CORS/Network). Verifique publicação do Script.", 'error');
+    notifyFn("Erro de Conexão: Verifique sua internet ou se o Script foi publicado como 'Anyone'.", 'error');
     throw error;
   }
 };
-
 
 export const apiService = {
   login: async (email: string, password: string): Promise<User> => {
@@ -108,7 +113,6 @@ export const apiService = {
         globalSettings: incoming.globalSettings || INITIAL_DATA.globalSettings,
       };
     } catch (e: any) {
-      // Em caso de falha de carregamento inicial, não bloqueia o app, usa os dados locais
       console.warn("Usando dados locais de fallback.");
       return INITIAL_DATA;
     }
